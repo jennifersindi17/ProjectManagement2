@@ -1,0 +1,109 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+  --primary: 221.2 83.2% 53.3%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222.2 27.4% 14.9%;
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 210 40% 96.1%;
+  --accent-foreground: 222.2 27.4% 14.9%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 221.2 83.2% 53.3%;
+  --radius: 0.5rem;
+}
+
+.dark {
+  --background: 222.2 84% 4.9%;
+  --foreground: 210 40% 98%;
+  --card: 222.2 84% 4.9%;
+  --card-foreground: 210 40% 98%;
+  --primary: 217.2 91.2% 59.8%;
+  --primary-foreground: 222.2 27.4% 14.9%;
+  --secondary: 217.2 32.6% 17.5%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 217.2 32.6% 17.5%;
+  --muted-foreground: 215 20.2% 65.1%;
+  --accent: 217.2 32.6% 17.5%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 217.2 32.6% 17.5%;
+  --input: 217.2 32.6% 17.5%;
+  --ring: 224.3 76.3% 48%;
+}
+
+* { @apply border-border; }
+body { @apply bg-background text-foreground; }
+
+.sidebar-link {
+  @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors;
+}
+.sidebar-link.active {
+  @apply bg-primary/10 text-primary;
+}
+
+.card {
+  @apply bg-card text-card-foreground border border-border rounded-lg shadow-sm;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50;
+}
+.btn-primary {
+  @apply bg-primary text-primary-foreground hover:bg-primary/90;
+}
+.btn-secondary {
+  @apply bg-secondary text-secondary-foreground hover:bg-secondary/80;
+}
+.btn-destructive {
+  @apply bg-destructive text-destructive-foreground hover:bg-destructive/90;
+}
+.btn-outline {
+  @apply border border-border bg-background hover:bg-accent hover:text-accent-foreground;
+}
+.btn-ghost {
+  @apply hover:bg-accent hover:text-accent-foreground;
+}
+.btn-sm { @apply h-8 px-3 text-xs; }
+.btn-lg { @apply h-10 px-8; }
+
+.input {
+  @apply flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+.select {
+  @apply flex h-10 w-full items-center justify-between rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+.table-container { @apply w-full overflow-auto; }
+.table { @apply w-full caption-bottom text-sm; }
+.table-header { @apply [&_tr]:border-b; }
+.table-row { @apply border-b transition-colors hover:bg-muted/50; }
+.table-head { @apply h-12 px-4 text-left align-middle font-medium text-muted-foreground; }
+.table-cell { @apply p-4 align-middle; }
+
+.badge {
+  @apply inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors;
+}
+.badge-green { @apply bg-green-100 text-green-800 border-green-200; }
+.badge-yellow { @apply bg-yellow-100 text-yellow-800 border-yellow-200; }
+.badge-red { @apply bg-red-100 text-red-800 border-red-200; }
+.badge-blue { @apply bg-blue-100 text-blue-800 border-blue-200; }
+.badge-gray { @apply bg-gray-100 text-gray-800 border-gray-200; }
+
+.dark .badge-green { @apply bg-green-900/30 text-green-400 border-green-800; }
+.dark .badge-yellow { @apply bg-yellow-900/30 text-yellow-400 border-yellow-800; }
+.dark .badge-red { @apply bg-red-900/30 text-red-400 border-red-800; }
+.dark .badge-blue { @apply bg-blue-900/30 text-blue-400 border-blue-800; }
+.dark .badge-gray { @apply bg-gray-800 text-gray-400 border-gray-700; }

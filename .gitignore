@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Build output
+dist/
+build/
+.next/
+*/dist/
+*/build/
+
+# Environment (keep .env.example, ignore actual .env)
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Testing
+coverage/
+
+# Docker volumes
+postgres_data/
+redis_data/
+minio_data/
+
+# Temp
+tmp/
+temp/
+.cache/
