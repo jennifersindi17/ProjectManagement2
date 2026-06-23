@@ -1,0 +1,1 @@
+{"scripts":{"seed":"node --experimental-vm-modules seed.js"},"dependencies":{"pg":"^8.22.0"}}
