@@ -220,6 +220,23 @@ CREATE INDEX idx_task_comments_task ON task_comments(task_id);
 CREATE INDEX idx_task_comments_user ON task_comments(user_id);
 
 -- ============================================
+-- TASK CHECKLIST ITEMS
+-- ============================================
+CREATE TABLE task_checklist_items (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    completed BOOLEAN NOT NULL DEFAULT false,
+    position INTEGER DEFAULT 0,
+    completed_by UUID REFERENCES users(id),
+    completed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_task_checklist_task ON task_checklist_items(task_id);
+
+-- ============================================
 -- TASK ACTIVITY LOG
 -- ============================================
 CREATE TABLE task_activities (

@@ -7,6 +7,43 @@ interface FetchOptions {
   params?: Record<string, string>;
 }
 
+interface TaskStats {
+  total: number;
+  myTasks: number;
+  overdue: number;
+  dueToday: number;
+  inProgress: number;
+  completed: number;
+  priorityBreakdown: { priority: string; count: string }[];
+  statusBreakdown: { status: string; count: string }[];
+}
+
+interface Task {
+  id: string;
+  taskCode: string;
+  title: string;
+  description?: string;
+  status: string;
+  priority: string;
+  taskType?: string;
+  projectName?: string;
+  projectCode?: string;
+  assignee?: { firstName: string; lastName: string; avatar?: string } | null;
+  dueDate?: string;
+  startDate?: string;
+  completionPercentage?: number;
+  labels?: string[];
+  createdAt?: string;
+}
+
+interface MyTasksGroup {
+  assigned: Task[];
+  dueToday: Task[];
+  upcoming: Task[];
+  overdue: Task[];
+  completed: Task[];
+}
+
 async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
   const { method = 'GET', body, token, params } = options;
   
@@ -39,14 +76,14 @@ export const api = {
     me: (token: string) => apiFetch('/auth/me', { token }),
   },
   users: {
-    list: (params?: any, token?: string) => apiFetch('/users', { token, params }),
+    list: (params?: any, token?: string): Promise<{ data: any[]; meta: any }> => apiFetch('/users', { token, params }),
     get: (id: string, token: string) => apiFetch(`/users/${id}`, { token }),
     create: (data: any, token: string) => apiFetch('/users', { method: 'POST', body: data, token }),
     update: (id: string, data: any, token: string) => apiFetch(`/users/${id}`, { method: 'PATCH', body: data, token }),
     delete: (id: string, token: string) => apiFetch(`/users/${id}`, { method: 'DELETE', token }),
   },
   projects: {
-    list: (params?: any, token?: string) => apiFetch('/projects', { token, params }),
+    list: (params?: any, token?: string): Promise<{ data: any[]; meta: any }> => apiFetch('/projects', { token, params }),
     get: (id: string, token: string) => apiFetch(`/projects/${id}`, { token }),
     overview: (id: string, token: string) => apiFetch(`/projects/${id}/overview`, { token }),
     create: (data: any, token: string) => apiFetch('/projects', { method: 'POST', body: data, token }),
@@ -54,11 +91,29 @@ export const api = {
     delete: (id: string, token: string) => apiFetch(`/projects/${id}`, { method: 'DELETE', token }),
   },
   tasks: {
-    list: (params?: any, token?: string) => apiFetch('/tasks', { token, params }),
+    list: (params?: any, token?: string): Promise<{ data: Task[]; meta: { page: number; limit: number; total: number; totalPages: number } }> => apiFetch('/tasks', { token, params }),
     get: (id: string, token: string) => apiFetch(`/tasks/${id}`, { token }),
     create: (data: any, token: string) => apiFetch('/tasks', { method: 'POST', body: data, token }),
     update: (id: string, data: any, token: string) => apiFetch(`/tasks/${id}`, { method: 'PATCH', body: data, token }),
     delete: (id: string, token: string) => apiFetch(`/tasks/${id}`, { method: 'DELETE', token }),
+    stats: (token: string): Promise<TaskStats> => apiFetch('/tasks/center/stats', { token }),
+    kanban: (token: string, projectId?: string): Promise<{ columns: Record<string, Task[]>; total: number }> =>
+      apiFetch(`/tasks/center/kanban${projectId ? `?projectId=${projectId}` : ''}`, { token }),
+    calendar: (start: string, end: string, projectId: string | undefined, token: string): Promise<Task[]> =>
+      apiFetch(`/tasks/center/calendar?start=${start}&end=${end}${projectId ? `&projectId=${projectId}` : ''}`, { token }),
+    myTasks: (token: string): Promise<MyTasksGroup> => apiFetch('/tasks/center/my-tasks', { token }),
+    tags: (token: string): Promise<string[]> => apiFetch('/tasks/center/tags', { token }),
+    comments: (taskId: string, token: string): Promise<any[]> => apiFetch(`/tasks/${taskId}/comments`, { token }),
+    addComment: (taskId: string, content: string, token: string) => apiFetch(`/tasks/${taskId}/comments`, { method: 'POST', body: { content }, token }),
+    checklist: (taskId: string, token: string): Promise<any[]> => apiFetch(`/tasks/${taskId}/checklist`, { token }),
+    addChecklist: (taskId: string, title: string, token: string) => apiFetch(`/tasks/${taskId}/checklist`, { method: 'POST', body: { title }, token }),
+    toggleChecklist: (taskId: string, itemId: string, completed: boolean, token: string) =>
+      apiFetch(`/tasks/${taskId}/checklist/${itemId}`, { method: 'PATCH', body: { completed }, token }),
+    activity: (taskId: string, token: string): Promise<any[]> => apiFetch(`/tasks/${taskId}/activity`, { token }),
+    bulkStatus: (taskIds: string[], status: string, token: string) =>
+      apiFetch('/tasks/bulk/status', { method: 'PATCH', body: { taskIds, status }, token }),
+    bulkDelete: (taskIds: string[], token: string) =>
+      apiFetch('/tasks/bulk/delete', { method: 'DELETE', body: { taskIds }, token }),
   },
   sprints: {
     list: (projectId: string, token: string) => apiFetch(`/sprints?projectId=${projectId}`, { token }),

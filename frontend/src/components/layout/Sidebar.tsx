@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, FolderKanban, ListTodo, Columns, BarChart3,
+  LayoutDashboard, FolderKanban, Layers, Columns, BarChart3,
   Clock, Users, Calendar, AlertTriangle, Shield, FileText,
   FolderOpen, Bell, BarChart2, Settings, Bot, Building2,
   ChevronLeft, ChevronRight, LogOut
@@ -14,7 +14,7 @@ import { useAuth } from '@/store/auth';
 const menuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
   { icon: FolderKanban, label: 'Projects', href: '/dashboard/projects' },
-  { icon: ListTodo, label: 'Tasks', href: '/dashboard/tasks' },
+  { icon: Layers, label: 'Task Center', href: '/dashboard/tasks' },
   { icon: Columns, label: 'Kanban', href: '/dashboard/kanban' },
   { icon: BarChart3, label: 'Gantt', href: '/dashboard/gantt' },
   { icon: Clock, label: 'Timesheet', href: '/dashboard/timesheet' },
