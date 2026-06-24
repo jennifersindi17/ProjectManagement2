@@ -79,4 +79,4 @@ docker compose up -d
 
 ## License
 
-MIT
+- Jennifer Sindi
