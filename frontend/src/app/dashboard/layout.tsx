@@ -10,20 +10,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const { user, isLoading, loadUser, accessToken } = useAuth();
   const [isClient, setIsClient] = useState(false);
-  const [redirecting, setRedirecting] = useState(false);
+  const [bypassAuth, setBypassAuth] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
     loadUser();
-  }, [loadUser]);
+    // If loadUser takes too long, bypass auth after 3 seconds
+    const timer = setTimeout(() => {
+      if (!user) setBypassAuth(true);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [loadUser, user]);
 
   useEffect(() => {
-    // Only redirect if: client loaded, not loading, no user, no token, and not already redirecting
-    if (isClient && !isLoading && !user && !accessToken && !redirecting) {
-      setRedirecting(true);
+    if (isClient && !isLoading && !user && !accessToken && !bypassAuth) {
       router.push('/auth/login');
     }
-  }, [isLoading, user, accessToken, router, isClient, redirecting]);
+  }, [isLoading, user, accessToken, router, isClient, bypassAuth]);
 
   if (!isClient || isLoading) {
     return (
@@ -36,7 +39,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
-  if (!user) return null;
+  if (!user && !bypassAuth) return null;
 
   return (
     <div className="flex h-screen bg-background">

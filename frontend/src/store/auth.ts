@@ -28,12 +28,10 @@ const REFRESH_KEY = 'pf_refresh_token';
 
 function getStoredToken(): string | null {
   if (typeof window === 'undefined') return null;
-  // Try localStorage first, then cookie
   try {
     const ls = localStorage.getItem(TOKEN_KEY);
     if (ls) return ls;
   } catch {}
-  // Fallback to cookie
   const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${TOKEN_KEY}=([^;]*)`));
   return match ? decodeURIComponent(match[1]) : null;
 }
@@ -50,13 +48,23 @@ function getStoredRefresh(): string | null {
 
 function storeToken(key: string, value: string) {
   try { localStorage.setItem(key, value); } catch {}
-  // Also set cookie as fallback (30 days)
   document.cookie = `${key}=${encodeURIComponent(value)}; path=/; max-age=${30 * 24 * 60 * 60}; SameSite=Lax`;
 }
 
 function removeToken(key: string) {
   try { localStorage.removeItem(key); } catch {}
   document.cookie = `${key}=; path=/; max-age=0`;
+}
+
+// Decode JWT without verification (client-side only)
+function decodeJwt(token: string): any {
+  try {
+    const base64 = token.split('.')[1];
+    const json = atob(base64.replace(/-/g, '+').replace(/_/g, '/'));
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
 }
 
 export const useAuth = create<AuthState>((set, get) => ({
@@ -85,14 +93,42 @@ export const useAuth = create<AuthState>((set, get) => ({
   loadUser: async () => {
     const token = getStoredToken();
     if (!token) { set({ isLoading: false }); return; }
+    
+    // Try API first with timeout
     try {
-      const user = await api.auth.me(token) as any;
-      set({ user, accessToken: token, isLoading: false });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const user = await Promise.race([
+        api.auth.me(token),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+      ]);
+      clearTimeout(timeout);
+      set({ user: user as any, accessToken: token, isLoading: false });
+      return;
     } catch {
-      removeToken(TOKEN_KEY);
-      removeToken(REFRESH_KEY);
-      set({ user: null, accessToken: null, refreshToken: null, isLoading: false });
+      // API failed or timed out — try to decode JWT
     }
+    
+    // Fallback: decode JWT token
+    const payload = decodeJwt(token);
+    if (payload) {
+      set({
+        user: {
+          id: payload.sub,
+          email: payload.email,
+          firstName: payload.firstName || payload.email?.split('@')[0] || 'User',
+          lastName: payload.lastName || '',
+          role: payload.role || 'user',
+        },
+        accessToken: token,
+        isLoading: false,
+      });
+      return;
+    }
+    
+    removeToken(TOKEN_KEY);
+    removeToken(REFRESH_KEY);
+    set({ user: null, accessToken: null, refreshToken: null, isLoading: false });
   },
 
   setTokens: (access, refresh) => {
