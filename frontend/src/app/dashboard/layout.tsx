@@ -8,8 +8,9 @@ import { useAuth } from '@/store/auth';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { user, isLoading, loadUser } = useAuth();
+  const { user, isLoading, loadUser, accessToken } = useAuth();
   const [isClient, setIsClient] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
@@ -17,10 +18,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [loadUser]);
 
   useEffect(() => {
-    if (isClient && !isLoading && !user) {
+    // Only redirect if: client loaded, not loading, no user, no token, and not already redirecting
+    if (isClient && !isLoading && !user && !accessToken && !redirecting) {
+      setRedirecting(true);
       router.push('/auth/login');
     }
-  }, [isLoading, user, router, isClient]);
+  }, [isLoading, user, accessToken, router, isClient, redirecting]);
 
   if (!isClient || isLoading) {
     return (

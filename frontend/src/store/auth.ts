@@ -1,3 +1,5 @@
+'use client';
+
 import { create } from 'zustand';
 import { api } from '@/lib/api';
 
@@ -26,12 +28,35 @@ const REFRESH_KEY = 'pf_refresh_token';
 
 function getStoredToken(): string | null {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem(TOKEN_KEY);
+  // Try localStorage first, then cookie
+  try {
+    const ls = localStorage.getItem(TOKEN_KEY);
+    if (ls) return ls;
+  } catch {}
+  // Fallback to cookie
+  const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${TOKEN_KEY}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
 }
 
 function getStoredRefresh(): string | null {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem(REFRESH_KEY);
+  try {
+    const ls = localStorage.getItem(REFRESH_KEY);
+    if (ls) return ls;
+  } catch {}
+  const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${REFRESH_KEY}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function storeToken(key: string, value: string) {
+  try { localStorage.setItem(key, value); } catch {}
+  // Also set cookie as fallback (30 days)
+  document.cookie = `${key}=${encodeURIComponent(value)}; path=/; max-age=${30 * 24 * 60 * 60}; SameSite=Lax`;
+}
+
+function removeToken(key: string) {
+  try { localStorage.removeItem(key); } catch {}
+  document.cookie = `${key}=; path=/; max-age=0`;
 }
 
 export const useAuth = create<AuthState>((set, get) => ({
@@ -42,8 +67,8 @@ export const useAuth = create<AuthState>((set, get) => ({
 
   login: async (email, password) => {
     const res: any = await api.auth.login(email, password);
-    localStorage.setItem(TOKEN_KEY, res.accessToken);
-    localStorage.setItem(REFRESH_KEY, res.refreshToken);
+    storeToken(TOKEN_KEY, res.accessToken);
+    storeToken(REFRESH_KEY, res.refreshToken);
     set({ user: res.user, accessToken: res.accessToken, refreshToken: res.refreshToken, isLoading: false });
   },
 
@@ -52,8 +77,8 @@ export const useAuth = create<AuthState>((set, get) => ({
     if (accessToken) {
       try { await api.auth.logout(accessToken); } catch {}
     }
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(REFRESH_KEY);
+    removeToken(TOKEN_KEY);
+    removeToken(REFRESH_KEY);
     set({ user: null, accessToken: null, refreshToken: null, isLoading: false });
   },
 
@@ -64,15 +89,15 @@ export const useAuth = create<AuthState>((set, get) => ({
       const user = await api.auth.me(token) as any;
       set({ user, accessToken: token, isLoading: false });
     } catch {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(REFRESH_KEY);
+      removeToken(TOKEN_KEY);
+      removeToken(REFRESH_KEY);
       set({ user: null, accessToken: null, refreshToken: null, isLoading: false });
     }
   },
 
   setTokens: (access, refresh) => {
-    localStorage.setItem(TOKEN_KEY, access);
-    localStorage.setItem(REFRESH_KEY, refresh);
+    storeToken(TOKEN_KEY, access);
+    storeToken(REFRESH_KEY, refresh);
     set({ accessToken: access, refreshToken: refresh });
   },
 }));

@@ -19,7 +19,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      router.push('/dashboard');
+      // Use window.location for full page navigation to avoid Zustand state reset
+      window.location.href = '/dashboard/tasks';
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {
