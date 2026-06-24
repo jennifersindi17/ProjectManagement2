@@ -8,7 +8,7 @@ export class BudgetService {
   constructor(@InjectRepository(BudgetEntry) private repo: Repository<BudgetEntry>) {}
 
   async findAll(projectId: string) {
-    return this.repo.find({ where: { projectId }, orderBy: { date: 'DESC' } });
+    return this.repo.find({ where: { projectId }, order: { date: 'DESC' } });
   }
 
   async getSummary(projectId: string) {

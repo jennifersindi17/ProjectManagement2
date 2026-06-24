@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "tsconfig-paths",
+        "config": {
+          "pathMappings": {
+            "@common/*": ["src/common/*"],
+            "@config/*": ["src/config/*"]
+          }
+        }
+      }
+    ]
+  },
+  "exclude": ["node_modules", "dist", "scripts"]
+}

@@ -8,7 +8,7 @@ export class SprintsService {
   constructor(@InjectRepository(Sprint) private repo: Repository<Sprint>) {}
 
   async findAll(projectId: string) {
-    return this.repo.find({ where: { projectId }, orderBy: { startDate: 'DESC' } });
+    return this.repo.find({ where: { projectId }, order: { startDate: 'DESC' } });
   }
 
   async findOne(id: string) {

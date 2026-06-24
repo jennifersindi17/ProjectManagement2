@@ -2,7 +2,7 @@ import { Controller, Get, Post, Patch, Delete, Param, Query, Body, UseGuards } f
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TimesheetsService } from './timesheets.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Timesheets')
 @Controller('timesheets')

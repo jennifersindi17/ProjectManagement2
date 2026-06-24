@@ -2,12 +2,12 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Project } from './entities/project.entity';
-import { CreateProjectDto } from './dto/create-project.dto';
-import { UpdateProjectDto } from './dto/update-project.dto';
 
 @Injectable()
 export class ProjectsService {
-  constructor(@InjectRepository(Project) private repo: Repository<Project>) {}
+  constructor(
+    @InjectRepository(Project) private repo: Repository<Project>,
+  ) {}
 
   async findAll(page = 1, limit = 20, status?: string, health?: string, managerId?: string, search?: string) {
     const qb = this.repo.createQueryBuilder('p').where('p.deletedAt IS NULL');
@@ -26,21 +26,34 @@ export class ProjectsService {
     return project;
   }
 
-  async create(dto: CreateProjectDto, userId: string) {
+  async findOneWithDetails(id: string) {
+    const project = await this.repo.findOne({ where: { id, deletedAt: null } });
+    if (!project) throw new NotFoundException('Project not found');
+    return project;
+  }
+
+  async getOverview(id: string) {
+    // Use project_dashboard view for stats
+    const result = await this.repo.query('SELECT * FROM project_dashboard WHERE id = $1', [id]);
+    if (!result || result.length === 0) throw new NotFoundException('Project not found');
+    return result[0];
+  }
+
+  async create(dto: any, userId: string) {
     const count = await this.repo.count();
     const code = `PRJ-${String(count + 1).padStart(4, '0')}`;
     const project = this.repo.create({ ...dto, code, createdBy: userId });
     return this.repo.save(project);
   }
 
-  async update(id: string, dto: UpdateProjectDto) {
+  async update(id: string, dto: any) {
     await this.findOne(id);
     await this.repo.update(id, dto);
     return this.findOne(id);
   }
 
   async remove(id: string) {
-    await this.repo.update(id, { deletedAt: new Date() });
+    await this.repo.update(id, { deletedAt: new Date() } as any);
     return { message: 'Project deleted' };
   }
 }

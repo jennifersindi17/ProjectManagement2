@@ -35,12 +35,12 @@ export class DashboardService {
   }
 
   async getProjectDashboard() {
-    const projects = await this.projectsRepo.find({ where: { deletedAt: null }, take: 10, orderBy: { createdAt: 'DESC' } });
+    const projects = await this.projectsRepo.find({ where: { deletedAt: null }, take: 10, order: { createdAt: 'DESC' } });
     return projects;
   }
 
   async getRecentActivities() {
-    const tasks = await this.tasksRepo.find({ where: { deletedAt: null }, take: 10, orderBy: { updatedAt: 'DESC' } });
+    const tasks = await this.tasksRepo.find({ where: { deletedAt: null }, take: 10, order: { updatedAt: 'DESC' } });
     return tasks;
   }
 }

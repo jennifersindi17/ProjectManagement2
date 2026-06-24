@@ -20,7 +20,10 @@
     "paths": {
       "@common/*": ["src/common/*"],
       "@config/*": ["src/config/*"]
-    }
+    },
+    "plugins": [
+      { "name": "tsconfig-paths" }
+    ]
   },
   "exclude": ["node_modules", "dist"]
 }

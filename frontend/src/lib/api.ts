@@ -48,6 +48,7 @@ export const api = {
   projects: {
     list: (params?: any, token?: string) => apiFetch('/projects', { token, params }),
     get: (id: string, token: string) => apiFetch(`/projects/${id}`, { token }),
+    overview: (id: string, token: string) => apiFetch(`/projects/${id}/overview`, { token }),
     create: (data: any, token: string) => apiFetch('/projects', { method: 'POST', body: data, token }),
     update: (id: string, data: any, token: string) => apiFetch(`/projects/${id}`, { method: 'PATCH', body: data, token }),
     delete: (id: string, token: string) => apiFetch(`/projects/${id}`, { method: 'DELETE', token }),

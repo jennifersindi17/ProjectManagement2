@@ -26,7 +26,7 @@ export function getStatusColor(status: string): string {
     // Task status
     backlog: 'badge-gray', todo: 'badge-blue', in_progress: 'badge-yellow',
     review: 'badge-yellow', testing: 'badge-yellow', done: 'badge-green',
-    blocked: 'badge-red', cancelled: 'badge-red',
+    blocked: 'badge-red',
     // Health
     green: 'badge-green', yellow: 'badge-yellow', red: 'badge-red',
     // Priority
@@ -38,9 +38,6 @@ export function getStatusColor(status: string): string {
     // Risk
     identified: 'badge-blue', assessed: 'badge-yellow', mitigated: 'badge-green', monitoring: 'badge-green',
     occurred: 'badge-red',
-    // Change request
-    review: 'badge-yellow', approved: 'badge-green', rejected: 'badge-red',
-    in_development: 'badge-blue', deployed: 'badge-green',
   };
   return colors[status] || 'badge-gray';
 }

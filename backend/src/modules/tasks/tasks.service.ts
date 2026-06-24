@@ -38,8 +38,9 @@ export class TasksService {
 
   async update(id: string, dto: UpdateTaskDto) {
     await this.findOne(id);
-    if (dto.status === 'done') dto.completedAt = new Date();
-    await this.repo.update(id, dto);
+    const updateData: any = { ...dto };
+    if (dto.status === 'done') updateData.completedAt = new Date();
+    await this.repo.update(id, updateData);
     return this.findOne(id);
   }
 

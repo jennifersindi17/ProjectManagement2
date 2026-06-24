@@ -43,7 +43,7 @@ export class AuthService {
       emailVerifiedAt: new Date(),
       ...(createdBy && { createdBy }),
     } as any);
-    const saved = await this.usersRepo.save(user);
+    const saved = await this.usersRepo.save(user) as any;
     return this.sanitize(saved);
   }
 

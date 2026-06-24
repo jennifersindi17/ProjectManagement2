@@ -18,10 +18,10 @@ export default function DashboardPage() {
       api.dashboard.stats(accessToken),
       api.dashboard.projects(accessToken),
       api.dashboard.activities(accessToken),
-    ]).then(([s, p, a]) => {
-      setStats(s);
-      setProjects(p);
-      setActivities(a);
+    ]).then((results: any) => {
+      setStats(results[0]);
+      setProjects(results[1]);
+      setActivities(results[2]);
     }).catch(console.error);
   }, [accessToken]);
 
@@ -40,10 +40,9 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground">Welcome back! Here's your project overview.</p>
+        <p className="text-muted-foreground">Welcome back! Here is your project overview.</p>
       </div>
 
-      {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {statCards.map((card) => (
           <div key={card.label} className="card p-4">
@@ -56,7 +55,6 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Projects Table */}
       <div className="card">
         <div className="p-4 border-b border-border">
           <h2 className="font-semibold">Recent Projects</h2>
@@ -103,7 +101,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Recent Activities */}
       <div className="card">
         <div className="p-4 border-b border-border">
           <h2 className="font-semibold">Recent Activities</h2>

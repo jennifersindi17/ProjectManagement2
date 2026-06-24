@@ -1,0 +1,775 @@
+'use client';
+
+import { useEffect, useState, useCallback, use } from 'react';
+import { useAuth } from '@/store/auth';
+import { api } from '@/lib/api';
+import { formatCurrency, formatDate } from '@/lib/utils';
+import Link from 'next/link';
+import { ArrowLeft, Plus, Calendar, Users, AlertTriangle, FileText, DollarSign, Activity, Clock, Target, TrendingUp, BarChart3 } from 'lucide-react';
+
+const TABS = [
+  { id: 'overview', label: 'Overview', icon: BarChart3 },
+  { id: 'tasks', label: 'Tasks', icon: Target },
+  { id: 'timeline', label: 'Timeline', icon: Calendar },
+  { id: 'resources', label: 'Resources', icon: Users },
+  { id: 'meetings', label: 'Meetings', icon: Clock },
+  { id: 'issues', label: 'Issues', icon: AlertTriangle },
+  { id: 'risks', label: 'Risks', icon: AlertTriangle },
+  { id: 'change-requests', label: 'Change Requests', icon: FileText },
+  { id: 'documents', label: 'Documents', icon: FileText },
+  { id: 'financial', label: 'Financial', icon: DollarSign },
+  { id: 'reports', label: 'Reports', icon: TrendingUp },
+  { id: 'activity', label: 'Activity Log', icon: Activity },
+];
+
+export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { accessToken: token } = useAuth();
+  const { id } = use(params);
+  const [activeTab, setActiveTab] = useState('overview');
+  const [project, setProject] = useState<any>(null);
+  const [overview, setOverview] = useState<any>(null);
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [issues, setIssues] = useState<any[]>([]);
+  const [risks, setRisks] = useState<any[]>([]);
+  const [meetings, setMeetings] = useState<any[]>([]);
+  const [changeRequests, setChangeRequests] = useState<any[]>([]);
+  const [documents, setDocuments] = useState<any[]>([]);
+  const [budget, setBudget] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadData = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const [proj, ov, tsk, iss, rsk, mtg, cr, doc, bud] = await Promise.all([
+        api.projects.get(id, token),
+        api.projects.overview(id, token).catch(() => null),
+        api.tasks.list({ projectId: id }, token).catch((e: any) => ({ data: [] })),
+        api.issues.list({ projectId: id }, token).catch((e: any) => ({ data: [] })),
+        api.risks.list(id, token).catch((e: any) => ({ data: [] })),
+        api.meetings.list({ projectId: id }, token).catch((e: any) => ({ data: [] })),
+        api.changeRequests.list({ projectId: id }, token).catch((e: any) => ({ data: [] })),
+        api.documents.list({ projectId: id }, token).catch((e: any) => ({ data: [] })),
+        api.budget.list(id, token).catch((e: any) => ({ data: [] })),
+      ]);
+      setProject(proj);
+      setOverview(ov);
+      setTasks((tsk as any).data || []);
+      setIssues((iss as any).data || []);
+      setRisks((rsk as any).data || []);
+      setMeetings((mtg as any).data || []);
+      setChangeRequests((cr as any).data || []);
+      setDocuments((doc as any).data || []);
+      setBudget((bud as any).data || []);
+    } catch (err) {
+      console.error('Failed to load project:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [id, token]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!project) {
+    return <div className="text-center py-12 text-muted-foreground">Project not found</div>;
+  }
+
+  const stats = overview || {};
+  const totalTasks = Number(stats.total_tasks) || tasks.length;
+  const completedTasks = Number(stats.completed_tasks) || tasks.filter((t: any) => t.status === 'done').length;
+  const inProgressTasks = Number(stats.in_progress_tasks) || tasks.filter((t: any) => t.status === 'in_progress').length;
+  const pendingTasks = tasks.filter((t: any) => ['backlog', 'todo'].includes(t.status)).length;
+  const blockedTasks = tasks.filter((t: any) => t.status === 'blocked').length;
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <Link href="/dashboard/projects" className="p-2 hover:bg-muted rounded-lg">
+          <ArrowLeft className="w-5 h-5" />
+        </Link>
+        <div className="flex-1">
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold">{project.name}</h1>
+            <span className="badge badge-blue">{project.code}</span>
+          </div>
+          <p className="text-muted-foreground">{project.clientName}</p>
+        </div>
+      </div>
+
+      {/* Quick Stats Bar */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="card p-3">
+          <p className="text-xs text-muted-foreground">Status</p>
+          <p className="font-semibold capitalize">{project.status?.replace('_', ' ')}</p>
+        </div>
+        <div className="card p-3">
+          <p className="text-xs text-muted-foreground">Progress</p>
+          <p className="font-semibold">{project.completionPercentage}%</p>
+        </div>
+        <div className="card p-3">
+          <p className="text-xs text-muted-foreground">Priority</p>
+          <p className="font-semibold capitalize">{project.priority}</p>
+        </div>
+        <div className="card p-3">
+          <p className="text-xs text-muted-foreground">Start Date</p>
+          <p className="font-semibold">{formatDate(project.startDate)}</p>
+        </div>
+        <div className="card p-3">
+          <p className="text-xs text-muted-foreground">Target Go Live</p>
+          <p className="font-semibold">{formatDate(project.endDate)}</p>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="border-b border-border">
+        <div className="flex gap-1 overflow-x-auto">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                activeTab === tab.id
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === 'overview' && (
+        <OverviewTab
+          project={project}
+          overview={overview}
+          stats={{ totalTasks, completedTasks, inProgressTasks, pendingTasks, blockedTasks }}
+          issues={issues}
+          risks={risks}
+          tasks={tasks}
+        />
+      )}
+      {activeTab === 'tasks' && <TasksTab tasks={tasks} projectId={id} token={token!} />}
+      {activeTab === 'timeline' && <TimelineTab project={project} tasks={tasks} />}
+      {activeTab === 'resources' && <ResourcesTab overview={overview} />}
+      {activeTab === 'meetings' && <MeetingsTab meetings={meetings} />}
+      {activeTab === 'issues' && <IssuesTab issues={issues} />}
+      {activeTab === 'risks' && <RisksTab risks={risks} />}
+      {activeTab === 'change-requests' && <ChangeRequestsTab changeRequests={changeRequests} />}
+      {activeTab === 'documents' && <DocumentsTab documents={documents} />}
+      {activeTab === 'financial' && <FinancialTab project={project} budget={budget} />}
+      {activeTab === 'reports' && <ReportsTab project={project} overview={overview} />}
+      {activeTab === 'activity' && <ActivityTab projectId={id} />}
+    </div>
+  );
+}
+
+/* ============ OVERVIEW TAB ============ */
+function OverviewTab({ project, overview, stats, issues, risks, tasks }: any) {
+  const healthColor = (h: string) => {
+    if (h === 'green' || h === 'On Track' || h === 'Good') return '🟢';
+    if (h === 'yellow' || h === 'Warning') return '🟡';
+    return '🔴';
+  };
+
+  const getHealthStatus = (type: string) => {
+    if (type === 'schedule') return { label: 'On Track', color: 'green' };
+    if (type === 'budget') {
+      const pct = project.actualCost && project.budget ? (Number(project.actualCost) / Number(project.budget)) * 100 : 0;
+      if (pct > 90) return { label: 'Over Budget', color: 'red' };
+      if (pct > 70) return { label: 'Warning', color: 'yellow' };
+      return { label: 'On Track', color: 'green' };
+    }
+    if (type === 'resource') return { label: 'Good', color: 'green' };
+    if (type === 'risk') {
+      const highRisks = risks.filter((r: any) => r.severity === 'high' || r.severity === 'critical').length;
+      if (highRisks > 0) return { label: 'High', color: 'red' };
+      return { label: 'Low', color: 'green' };
+    }
+    return { label: 'N/A', color: 'green' };
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Project Info */}
+      <div className="card p-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <h3 className="font-semibold mb-3">Project Information</h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between"><span className="text-muted-foreground">Project Manager</span><span>{overview?.project_manager_name || '-'}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Client PIC</span><span>{project.clientContact || '-'}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Project Type</span><span>{project.projectType || '-'}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Contract Value</span><span>{formatCurrency(project.contractValue)}</span></div>
+            </div>
+          </div>
+          <div>
+            <h3 className="font-semibold mb-3">Project Health</h3>
+            <div className="grid grid-cols-2 gap-3">
+              {['schedule', 'budget', 'resource', 'risk'].map((type) => {
+                const h = getHealthStatus(type);
+                return (
+                  <div key={type} className="bg-muted/50 rounded-lg p-3">
+                    <p className="text-xs text-muted-foreground capitalize">{type} Health</p>
+                    <p className="font-semibold mt-1">{healthColor(h.label)} {h.label}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Summary Metrics */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="card p-4 text-center">
+          <p className="text-2xl font-bold">{stats.totalTasks}</p>
+          <p className="text-xs text-muted-foreground">Total Tasks</p>
+        </div>
+        <div className="card p-4 text-center">
+          <p className="text-2xl font-bold text-green-500">{stats.completedTasks}</p>
+          <p className="text-xs text-muted-foreground">Completed</p>
+        </div>
+        <div className="card p-4 text-center">
+          <p className="text-2xl font-bold text-blue-500">{stats.inProgressTasks}</p>
+          <p className="text-xs text-muted-foreground">In Progress</p>
+        </div>
+        <div className="card p-4 text-center">
+          <p className="text-2xl font-bold text-yellow-500">{stats.pendingTasks}</p>
+          <p className="text-xs text-muted-foreground">Pending</p>
+        </div>
+        <div className="card p-4 text-center">
+          <p className="text-2xl font-bold text-red-500">{stats.blockedTasks}</p>
+          <p className="text-xs text-muted-foreground">Blocked</p>
+        </div>
+      </div>
+
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Task Completion */}
+        <div className="card p-4">
+          <h3 className="font-semibold mb-3">Task Completion</h3>
+          <div className="space-y-2">
+            {['done', 'in_progress', 'todo', 'blocked'].map((status) => {
+              const count = status === 'done' ? stats.completedTasks : status === 'in_progress' ? stats.inProgressTasks : status === 'blocked' ? stats.blockedTasks : stats.pendingTasks;
+              const pct = stats.totalTasks > 0 ? (count / stats.totalTasks) * 100 : 0;
+              const colors: any = { done: 'bg-green-500', in_progress: 'bg-blue-500', todo: 'bg-yellow-500', blocked: 'bg-red-500' };
+              return (
+                <div key={status}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="capitalize">{status.replace('_', ' ')}</span>
+                    <span>{count} ({pct.toFixed(0)}%)</span>
+                  </div>
+                  <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                    <div className={`h-full ${colors[status]} rounded-full`} style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Task Distribution */}
+        <div className="card p-4">
+          <h3 className="font-semibold mb-3">Task Distribution</h3>
+          <div className="space-y-2">
+            {['backlog', 'todo', 'in_progress', 'review', 'testing', 'done', 'blocked'].map((status) => {
+              const count = tasks.filter((t: any) => t.status === status).length;
+              const pct = tasks.length > 0 ? (count / tasks.length) * 100 : 0;
+              const colors: any = { backlog: 'bg-gray-500', todo: 'bg-yellow-500', in_progress: 'bg-blue-500', review: 'bg-purple-500', testing: 'bg-orange-500', done: 'bg-green-500', blocked: 'bg-red-500' };
+              return (
+                <div key={status}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="capitalize">{status.replace('_', ' ')}</span>
+                    <span>{count}</span>
+                  </div>
+                  <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                    <div className={`h-full ${colors[status]} rounded-full`} style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Recent Issues & Risks */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="card p-4">
+          <h3 className="font-semibold mb-3">Open Issues ({issues.length})</h3>
+          {issues.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No open issues</p>
+          ) : (
+            <div className="space-y-2">
+              {issues.slice(0, 5).map((issue: any) => (
+                <div key={issue.id} className="flex items-center justify-between text-sm">
+                  <span className="truncate">{issue.title}</span>
+                  <span className={`badge badge-${issue.severity === 'critical' ? 'red' : issue.severity === 'high' ? 'orange' : 'blue'}`}>{issue.severity}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="card p-4">
+          <h3 className="font-semibold mb-3">Open Risks ({risks.length})</h3>
+          {risks.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No open risks</p>
+          ) : (
+            <div className="space-y-2">
+              {risks.slice(0, 5).map((risk: any) => (
+                <div key={risk.id} className="flex items-center justify-between text-sm">
+                  <span className="truncate">{risk.title}</span>
+                  <span className={`badge badge-${risk.severity === 'critical' ? 'red' : risk.severity === 'high' ? 'orange' : 'blue'}`}>{risk.severity}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============ TASKS TAB ============ */
+function TasksTab({ tasks, projectId, token }: any) {
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({ title: '', description: '', priority: 'medium', status: 'backlog', assigneeId: '', dueDate: '' });
+  const [saving, setSaving] = useState(false);
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.title.trim()) return;
+    setSaving(true);
+    try {
+      await api.tasks.create({ ...form, projectId }, token);
+      setShowModal(false);
+      setForm({ title: '', description: '', priority: 'medium', status: 'backlog', assigneeId: '', dueDate: '' });
+      // Reload
+      const res: any = await api.tasks.list({ projectId }, token);
+      // Parent will need to refresh - for now just close modal
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const statusColors: any = {
+    backlog: 'bg-gray-500', todo: 'bg-yellow-500', in_progress: 'bg-blue-500',
+    review: 'bg-purple-500', testing: 'bg-orange-500', done: 'bg-green-500', blocked: 'bg-red-500',
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold">Tasks ({tasks.length})</h3>
+        <button className="btn btn-primary btn-sm" onClick={() => setShowModal(true)}>
+          <Plus className="w-4 h-4 mr-1" /> Add Task
+        </button>
+      </div>
+
+      <div className="space-y-2">
+        {tasks.map((task: any) => (
+          <div key={task.id} className="card p-3 flex items-center gap-3">
+            <div className={`w-2 h-2 rounded-full ${statusColors[task.status] || 'bg-gray-500'}`} />
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-sm truncate">{task.title}</p>
+              <p className="text-xs text-muted-foreground">{task.taskCode}</p>
+            </div>
+            <span className="badge badge-sm">{task.priority}</span>
+            <span className={`badge badge-sm ${statusColors[task.status]?.replace('bg-', 'badge-') || ''}`}>{task.status?.replace('_', ' ')}</span>
+          </div>
+        ))}
+        {tasks.length === 0 && <p className="text-center text-muted-foreground py-8">No tasks yet</p>}
+      </div>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="font-semibold">New Task</h3>
+              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-muted rounded">✕</button>
+            </div>
+            <form onSubmit={handleCreate} className="p-4 space-y-3">
+              <div>
+                <label className="label">Title *</label>
+                <input className="input" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} required />
+              </div>
+              <div>
+                <label className="label">Description</label>
+                <textarea className="input min-h-[60px]" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Priority</label>
+                  <select className="select" value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })}>
+                    <option value="critical">Critical</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Status</label>
+                  <select className="select" value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
+                    <option value="backlog">Backlog</option>
+                    <option value="todo">To Do</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="review">Review</option>
+                    <option value="testing">Testing</option>
+                    <option value="done">Done</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="label">Due Date</label>
+                <input type="date" className="input" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" className="btn btn-ghost" onClick={() => setShowModal(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Creating...' : 'Create'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============ TIMELINE TAB ============ */
+function TimelineTab({ project, tasks }: any) {
+  const events = [
+    { date: project.startDate, title: 'Project Start', type: 'start' },
+    ...tasks.map((t: any) => ({ date: t.dueDate || t.createdAt, title: t.title, type: 'task', status: t.status })),
+    { date: project.endDate, title: 'Target Go Live', type: 'end' },
+  ].filter((e: any) => e.date).sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  return (
+    <div className="space-y-4">
+      <h3 className="font-semibold">Project Timeline</h3>
+      <div className="relative">
+        <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border" />
+        <div className="space-y-4">
+          {events.map((event: any, i: number) => (
+            <div key={i} className="flex items-start gap-4 relative">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold z-10 ${
+                event.type === 'start' ? 'bg-green-500 text-white' :
+                event.type === 'end' ? 'bg-red-500 text-white' :
+                event.status === 'done' ? 'bg-blue-500 text-white' :
+                'bg-muted text-muted-foreground'
+              }`}>
+                {event.type === 'start' ? '▶' : event.type === 'end' ? '🏁' : '📋'}
+              </div>
+              <div className="card p-3 flex-1">
+                <p className="font-medium text-sm">{event.title}</p>
+                <p className="text-xs text-muted-foreground">{formatDate(event.date)}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============ RESOURCES TAB ============ */
+function ResourcesTab({ overview }: any) {
+  return (
+    <div className="space-y-4">
+      <h3 className="font-semibold">Project Resources</h3>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="card p-4 text-center">
+          <Users className="w-8 h-8 mx-auto mb-2 text-primary" />
+          <p className="text-2xl font-bold">{overview?.team_size || 0}</p>
+          <p className="text-xs text-muted-foreground">Team Members</p>
+        </div>
+        <div className="card p-4 text-center">
+          <Target className="w-8 h-8 mx-auto mb-2 text-green-500" />
+          <p className="text-2xl font-bold">{overview?.completed_tasks || 0}</p>
+          <p className="text-xs text-muted-foreground">Tasks Completed</p>
+        </div>
+        <div className="card p-4 text-center">
+          <Clock className="w-8 h-8 mx-auto mb-2 text-blue-500" />
+          <p className="text-2xl font-bold">{overview?.in_progress_tasks || 0}</p>
+          <p className="text-xs text-muted-foreground">In Progress</p>
+        </div>
+      </div>
+      <div className="card p-4">
+        <p className="text-sm text-muted-foreground">Resource allocation details will be available here.</p>
+      </div>
+    </div>
+  );
+}
+
+/* ============ MEETINGS TAB ============ */
+function MeetingsTab({ meetings }: any) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold">Meetings ({meetings.length})</h3>
+        <button className="btn btn-primary btn-sm"><Plus className="w-4 h-4 mr-1" /> Schedule</button>
+      </div>
+      {meetings.length === 0 ? (
+        <div className="card p-8 text-center text-muted-foreground">No meetings scheduled</div>
+      ) : (
+        <div className="space-y-2">
+          {meetings.map((m: any) => (
+            <div key={m.id} className="card p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">{m.title}</p>
+                  <p className="text-xs text-muted-foreground">{formatDate(m.meetingDate || m.date)} • {m.status}</p>
+                </div>
+                <span className="badge">{m.meetingType || m.type}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============ ISSUES TAB ============ */
+function IssuesTab({ issues }: any) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold">Issues ({issues.length})</h3>
+        <button className="btn btn-primary btn-sm"><Plus className="w-4 h-4 mr-1" /> Report Issue</button>
+      </div>
+      {issues.length === 0 ? (
+        <div className="card p-8 text-center text-muted-foreground">No issues reported</div>
+      ) : (
+        <div className="space-y-2">
+          {issues.map((issue: any) => (
+            <div key={issue.id} className="card p-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="font-medium">{issue.title}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{issue.description?.substring(0, 100)}</p>
+                </div>
+                <div className="flex gap-2">
+                  <span className={`badge badge-${issue.severity === 'critical' ? 'red' : issue.severity === 'high' ? 'orange' : 'blue'}`}>{issue.severity}</span>
+                  <span className="badge">{issue.status}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============ RISKS TAB ============ */
+function RisksTab({ risks }: any) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold">Risks ({risks.length})</h3>
+        <button className="btn btn-primary btn-sm"><Plus className="w-4 h-4 mr-1" /> Add Risk</button>
+      </div>
+      {risks.length === 0 ? (
+        <div className="card p-8 text-center text-muted-foreground">No risks identified</div>
+      ) : (
+        <div className="space-y-2">
+          {risks.map((risk: any) => (
+            <div key={risk.id} className="card p-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="font-medium">{risk.title}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{risk.description?.substring(0, 100)}</p>
+                </div>
+                <div className="flex gap-2">
+                  <span className={`badge badge-${risk.severity === 'critical' ? 'red' : risk.severity === 'high' ? 'orange' : 'blue'}`}>{risk.severity}</span>
+                  <span className="badge">{risk.status}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============ CHANGE REQUESTS TAB ============ */
+function ChangeRequestsTab({ changeRequests }: any) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold">Change Requests ({changeRequests.length})</h3>
+        <button className="btn btn-primary btn-sm"><Plus className="w-4 h-4 mr-1" /> New Request</button>
+      </div>
+      {changeRequests.length === 0 ? (
+        <div className="card p-8 text-center text-muted-foreground">No change requests</div>
+      ) : (
+        <div className="space-y-2">
+          {changeRequests.map((cr: any) => (
+            <div key={cr.id} className="card p-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="font-medium">{cr.title}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{cr.description?.substring(0, 100)}</p>
+                </div>
+                <span className="badge">{cr.status}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============ DOCUMENTS TAB ============ */
+function DocumentsTab({ documents }: any) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold">Documents ({documents.length})</h3>
+        <button className="btn btn-primary btn-sm"><Plus className="w-4 h-4 mr-1" /> Upload</button>
+      </div>
+      {documents.length === 0 ? (
+        <div className="card p-8 text-center text-muted-foreground">No documents uploaded</div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {documents.map((doc: any) => (
+            <div key={doc.id} className="card p-4 flex items-center gap-3">
+              <FileText className="w-8 h-8 text-primary" />
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm truncate">{doc.title || doc.fileName}</p>
+                <p className="text-xs text-muted-foreground">{formatDate(doc.createdAt)}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============ FINANCIAL TAB ============ */
+function FinancialTab({ project, budget }: any) {
+  return (
+    <div className="space-y-4">
+      <h3 className="font-semibold">Financial Overview</h3>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="card p-4">
+          <p className="text-xs text-muted-foreground">Contract Value</p>
+          <p className="text-xl font-bold">{formatCurrency(project.contractValue)}</p>
+        </div>
+        <div className="card p-4">
+          <p className="text-xs text-muted-foreground">Budget</p>
+          <p className="text-xl font-bold">{formatCurrency(project.budget)}</p>
+        </div>
+        <div className="card p-4">
+          <p className="text-xs text-muted-foreground">Actual Cost</p>
+          <p className="text-xl font-bold">{formatCurrency(project.actualCost)}</p>
+        </div>
+      </div>
+      <div className="card p-4">
+        <h4 className="font-semibold mb-3">Budget Entries ({budget.length})</h4>
+        {budget.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No budget entries</p>
+        ) : (
+          <div className="space-y-2">
+            {budget.map((entry: any) => (
+              <div key={entry.id} className="flex items-center justify-between text-sm py-2 border-b border-border last:border-0">
+                <div>
+                  <p className="font-medium">{entry.description || entry.category}</p>
+                  <p className="text-xs text-muted-foreground">{formatDate(entry.date)}</p>
+                </div>
+                <span className="font-semibold">{formatCurrency(entry.amount)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ============ REPORTS TAB ============ */
+function ReportsTab({ project, overview }: any) {
+  return (
+    <div className="space-y-4">
+      <h3 className="font-semibold">Project Reports</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="card p-4">
+          <h4 className="font-semibold mb-2">Executive Summary</h4>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between"><span className="text-muted-foreground">Project</span><span>{project.name}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Status</span><span className="capitalize">{project.status?.replace('_', ' ')}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Health</span><span className="capitalize">{project.health}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Progress</span><span>{project.completionPercentage}%</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Budget Usage</span>
+              <span>{project.budget > 0 ? ((Number(project.actualCost) / Number(project.budget)) * 100).toFixed(1) : 0}%</span>
+            </div>
+          </div>
+        </div>
+        <div className="card p-4">
+          <h4 className="font-semibold mb-2">Key Metrics</h4>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between"><span className="text-muted-foreground">Total Tasks</span><span>{overview?.total_tasks || 0}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Completed</span><span>{overview?.completed_tasks || 0}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Open Issues</span><span>{overview?.open_issues || 0}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Open Risks</span><span>{overview?.open_risks || 0}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Team Size</span><span>{overview?.team_size || 0}</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============ ACTIVITY LOG TAB ============ */
+function ActivityTab({ projectId }: any) {
+  const [activities, setActivities] = useState<any[]>([]);
+
+  useEffect(() => {
+    // Load activity logs
+    api.audit.list({ projectId, limit: 50 }, '').then((res: any) => {
+      setActivities(res.data || res || []);
+    }).catch(() => {
+      setActivities([]);
+    });
+  }, [projectId]);
+
+  return (
+    <div className="space-y-4">
+      <h3 className="font-semibold">Activity Log</h3>
+      {activities.length === 0 ? (
+        <div className="card p-8 text-center text-muted-foreground">No activity recorded</div>
+      ) : (
+        <div className="space-y-2">
+          {activities.map((log: any, i: number) => (
+            <div key={log.id || i} className="card p-3 flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold">
+                {(log.userName || log.user_id || '?').charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <p className="text-sm">{log.action || log.description || log.message}</p>
+                <p className="text-xs text-muted-foreground">{formatDate(log.createdAt || log.created_at)}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

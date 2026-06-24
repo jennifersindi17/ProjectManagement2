@@ -8,7 +8,7 @@ export class RisksService {
   constructor(@InjectRepository(Risk) private repo: Repository<Risk>) {}
 
   async findAll(projectId: string) {
-    return this.repo.find({ where: { projectId }, orderBy: { probability: 'DESC', impact: 'DESC' } });
+    return this.repo.find({ where: { projectId }, order: { probability: 'DESC', impact: 'DESC' } });
   }
 
   async findOne(id: string) {
