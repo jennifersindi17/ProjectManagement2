@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
@@ -9,18 +9,20 @@ import { useAuth } from '@/store/auth';
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user, isLoading, loadUser } = useAuth();
+  const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
+    setIsClient(true);
     loadUser();
-  }, []);
+  }, [loadUser]);
 
   useEffect(() => {
-    if (!isLoading && !user) {
+    if (isClient && !isLoading && !user) {
       router.push('/auth/login');
     }
-  }, [isLoading, user, router]);
+  }, [isLoading, user, router, isClient]);
 
-  if (isLoading) {
+  if (!isClient || isLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">

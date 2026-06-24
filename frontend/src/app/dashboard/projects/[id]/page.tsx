@@ -161,7 +161,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           tasks={tasks}
         />
       )}
-      {activeTab === 'tasks' && <TasksTab tasks={tasks} projectId={id} token={token!} />}
+      {activeTab === 'tasks' && <TasksTab tasks={tasks} projectId={id} token={token || ''} onTaskCreated={() => loadData()} />}
       {activeTab === 'timeline' && <TimelineTab project={project} tasks={tasks} />}
       {activeTab === 'resources' && <ResourcesTab overview={overview} />}
       {activeTab === 'meetings' && <MeetingsTab meetings={meetings} />}
@@ -343,24 +343,31 @@ function OverviewTab({ project, overview, stats, issues, risks, tasks }: any) {
 }
 
 /* ============ TASKS TAB ============ */
-function TasksTab({ tasks, projectId, token }: any) {
+function TasksTab({ tasks, projectId, token, onTaskCreated }: any) {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ title: '', description: '', priority: 'medium', status: 'backlog', assigneeId: '', dueDate: '' });
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.title.trim()) return;
+    if (!token) { setError('No authentication token'); return; }
     setSaving(true);
+    setError('');
     try {
-      await api.tasks.create({ ...form, projectId }, token);
+      const payload: any = { title: form.title, projectId };
+      if (form.description) payload.description = form.description;
+      if (form.priority) payload.priority = form.priority;
+      if (form.status) payload.status = form.status;
+      if (form.assigneeId) payload.assigneeId = form.assigneeId;
+      if (form.dueDate) payload.dueDate = form.dueDate;
+      await api.tasks.create(payload, token);
       setShowModal(false);
       setForm({ title: '', description: '', priority: 'medium', status: 'backlog', assigneeId: '', dueDate: '' });
-      // Reload
-      const res: any = await api.tasks.list({ projectId }, token);
-      // Parent will need to refresh - for now just close modal
+      if (onTaskCreated) await onTaskCreated();
     } catch (err: any) {
-      console.error(err);
+      setError(err.message || 'Failed to create task');
     } finally {
       setSaving(false);
     }
@@ -403,6 +410,7 @@ function TasksTab({ tasks, projectId, token }: any) {
               <button onClick={() => setShowModal(false)} className="p-1 hover:bg-muted rounded">✕</button>
             </div>
             <form onSubmit={handleCreate} className="p-4 space-y-3">
+              {error && <div className="bg-red-500/10 text-red-500 text-sm p-3 rounded-lg">{error}</div>}
               <div>
                 <label className="label">Title *</label>
                 <input className="input" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} required />
