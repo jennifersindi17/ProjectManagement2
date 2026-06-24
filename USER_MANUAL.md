@@ -211,4 +211,4 @@ npm run test
 
 ## 📄 License
 
-MIT
+Jennifer Sindi
