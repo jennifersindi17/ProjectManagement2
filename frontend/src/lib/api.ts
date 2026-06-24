@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 interface FetchOptions {
   method?: string;
@@ -47,7 +47,7 @@ interface MyTasksGroup {
 async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
   const { method = 'GET', body, token, params } = options;
   
-  const url = new URL(`${API_URL}${path}`);
+  const url = new URL(`${API_BASE}${path}`, typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
   if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
