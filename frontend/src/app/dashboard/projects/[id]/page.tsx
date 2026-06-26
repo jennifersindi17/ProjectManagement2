@@ -7,6 +7,7 @@ import { formatCurrency, formatDate } from '@/lib/utils';
 import Link from 'next/link';
 import { ArrowLeft, Plus, Calendar, Users, AlertTriangle, FileText, DollarSign, Activity, Clock, Target, TrendingUp, BarChart3, MoreVertical, Edit3, Copy, Trash2, Eye, User as UserIcon } from 'lucide-react';
 import TaskModal from '@/components/tasks/TaskModal';
+import TaskDetailDrawer from '@/components/tasks/TaskDetailDrawer';
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: BarChart3 },
@@ -356,6 +357,7 @@ const STATUS_OPTIONS = ['backlog', 'todo', 'in_progress', 'review', 'testing', '
 
 function TasksTab({ tasks, projectId, token, onTaskCreated, users }: any) {
   const [taskModal, setTaskModal] = useState<{ mode: string; task?: any } | null>(null);
+  const [viewTaskId, setViewTaskId] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [openStatusId, setOpenStatusId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -411,8 +413,18 @@ function TasksTab({ tasks, projectId, token, onTaskCreated, users }: any) {
   };
 
   const openViewModal = (task: any) => {
-    setTaskModal({ mode: 'view', task });
+    setViewTaskId(task.id);
     setOpenMenuId(null);
+  };
+
+  const handleEditFromDrawer = (task: any) => {
+    setViewTaskId(null);
+    setTaskModal({ mode: 'edit', task });
+  };
+
+  const handleOpenTaskCenter = (taskId: string) => {
+    setViewTaskId(null);
+    window.open(`/dashboard/tasks?taskId=${taskId}`, '_blank');
   };
 
   const openEditModal = (task: any) => {
@@ -602,8 +614,8 @@ function TasksTab({ tasks, projectId, token, onTaskCreated, users }: any) {
         {tasks.length === 0 && <p className="text-center text-muted-foreground py-8">No tasks yet</p>}
       </div>
 
-      {/* TaskModal */}
-      {taskModal && (
+      {/* TaskModal - only for add/edit modes */}
+      {taskModal && taskModal.mode !== 'view' && (
         <TaskModal
           isOpen={!!taskModal}
           mode={taskModal.mode as 'add' | 'edit' | 'view'}
@@ -613,6 +625,18 @@ function TasksTab({ tasks, projectId, token, onTaskCreated, users }: any) {
           projectId={projectId}
           onClose={() => setTaskModal(null)}
           onSave={handleModalSave}
+        />
+      )}
+
+      {/* TaskDetailDrawer for view mode */}
+      {viewTaskId && (
+        <TaskDetailDrawer
+          isOpen={!!viewTaskId}
+          onClose={() => setViewTaskId(null)}
+          onEdit={handleEditFromDrawer}
+          onOpenTaskCenter={handleOpenTaskCenter}
+          taskId={viewTaskId}
+          token={token}
         />
       )}
 
