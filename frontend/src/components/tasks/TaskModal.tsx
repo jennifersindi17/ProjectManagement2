@@ -220,12 +220,27 @@ export default function TaskModal({
     }
   }, [isOpen, isEditMode, resetForm]);
 
-  // ─── Track changes ───────────────────────────────────────────────────────
+  // ─── Track changes (skip initial populate) ─────────────────────────────
+
+  const isPopulating = useRef(true);
 
   useEffect(() => {
     if (isOpen) {
-      setHasChanges(true);
+      // Mark as populating on first open for edit mode
+      if (task && isEditMode) {
+        isPopulating.current = true;
+      }
     }
+  }, [isOpen, task, isEditMode]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    // Skip the change tracking during initial populate
+    if (isPopulating.current) {
+      isPopulating.current = false;
+      return;
+    }
+    setHasChanges(true);
   }, [
     title, description, assigneeId, reporterId, startDate, dueDate,
     estimatedHours, actualHours, status, priority, completionPercentage,
@@ -256,6 +271,12 @@ export default function TaskModal({
 
   // ─── Save handler ────────────────────────────────────────────────────────
 
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   const handleSave = async () => {
     if (!validate()) return;
 
@@ -285,36 +306,35 @@ export default function TaskModal({
         checklist: checklist.length > 0 ? checklist : undefined,
       };
 
-      if (isEditMode && task) {
-        (data as TaskSaveData & { id: string }).id = task.id;
-      }
-
       const result = await onSave(data);
 
-      // Sync checklist items on edit mode
-      if (result !== false && isEditMode && task && token && checklist.length > 0) {
-        // Add new checklist items via API
-        for (const item of checklist) {
-          if (!item.id) {
-            await api.tasks.addChecklist(task.id, item.title, token).catch(() => {});
-          } else {
-            // Toggle completed state if changed
-            await api.tasks.toggleChecklist(task.id, item.id, item.completed, token).catch(() => {});
-          }
-        }
-      }
-
       if (result === false) {
-        // onSave returned false, don't close
         return;
       }
 
-      setHasChanges(false);
+      // Close first, then sync checklist (fire-and-forget)
       onClose();
+
+      // Sync checklist items (fire-and-forget after close)
+      if (isEditMode && task && token && checklist.length > 0) {
+        checklist.forEach(async (item) => {
+          try {
+            if (!item.id) {
+              await api.tasks.addChecklist(task.id, item.title, token);
+            } else {
+              await api.tasks.toggleChecklist(task.id, item.id, item.completed, token);
+            }
+          } catch {}
+        });
+      }
     } catch (err: any) {
-      setErrors({ form: err.message || 'Failed to save task' });
+      if (mountedRef.current) {
+        setErrors({ form: err.message || 'Failed to save task' });
+      }
     } finally {
-      setSaving(false);
+      if (mountedRef.current) {
+        setSaving(false);
+      }
     }
   };
 
