@@ -442,9 +442,13 @@ function TasksTab({ tasks, projectId, token, onTaskCreated, users }: any) {
     setSaving(true);
     try {
       if (taskModal?.mode === 'add') {
+        console.log('Parent: creating task');
         await api.tasks.create({ ...data, projectId }, token);
       } else if (taskModal?.mode === 'edit' && taskModal.task) {
-        await api.tasks.update(taskModal.task.id, data, token);
+        console.log('Parent: updating task', taskModal.task.id);
+        // Strip fields not in UpdateTaskDto (backend ValidationPipe forbids non-whitelisted)
+        const { projectId, reporterId, checklist, ...updatePayload } = data;
+        await api.tasks.update(taskModal.task.id, updatePayload, token);
         // Sync checklist items for edited task
         if (data.checklist && data.checklist.length > 0) {
           for (const item of data.checklist) {
@@ -458,11 +462,12 @@ function TasksTab({ tasks, projectId, token, onTaskCreated, users }: any) {
           }
         }
       }
+      console.log('Parent: save successful, refreshing...');
       setTaskModal(null);
       await refresh();
       return true;
     } catch (err: any) {
-      console.error('Failed to save task:', err);
+      console.error('Parent: Failed to save task:', err);
       return false;
     } finally {
       setSaving(false);
