@@ -623,6 +623,7 @@ function TasksTab({ tasks, projectId, token, onTaskCreated, users }: any) {
           users={users}
           token={token}
           projectId={projectId}
+          parentTasks={tasks}
           onClose={() => setTaskModal(null)}
           onSave={handleModalSave}
         />

@@ -106,7 +106,16 @@ export class TasksService {
       ? `${project[0].code}-${String(count + 1).padStart(4, '0')}`
       : `TSK-${String(count + 1).padStart(4, '0')}`;
     const task = this.repo.create({ ...dto, taskCode: code, reporterId: userId });
-    return this.repo.save(task);
+    const saved = await this.repo.save(task);
+
+    // Log task creation activity
+    await this.repo.query(
+      `INSERT INTO task_activities (task_id, user_id, action, field_changed, old_value, new_value, created_at)
+       VALUES ($1, $2, 'created', 'task', NULL, $3, NOW())`,
+      [saved.id, userId, saved.title],
+    );
+
+    return saved;
   }
 
   async update(id: string, dto: UpdateTaskDto, userId?: string) {
@@ -140,11 +149,14 @@ export class TasksService {
     if (userId) {
       const changes = this.buildChangeLog(existing, dto);
       if (changes.length > 0) {
-        await this.repo.query(
-          `INSERT INTO audit_logs (entity_type, entity_id, action, details, user_id, created_at)
-           VALUES ('task', $1, 'task_updated', $2, $3, NOW())`,
-          [id, JSON.stringify({ changes }), userId],
-        );
+        // Write to task_activities for the Activity Log UI
+        for (const change of changes) {
+          await this.repo.query(
+            `INSERT INTO task_activities (task_id, user_id, action, field_changed, old_value, new_value, created_at)
+             VALUES ($1, $2, 'field_updated', $3, $4, $5, NOW())`,
+            [id, userId, change.field, String(change.from), String(change.to)],
+          );
+        }
       }
     }
 

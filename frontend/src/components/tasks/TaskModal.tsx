@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Save, X, Plus, Trash2, AlertCircle } from 'lucide-react';
+import { api } from '@/lib/api';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -162,8 +163,21 @@ export default function TaskModal({
       setTaskType(task.taskType || 'task');
       setTagsInput(task.labels?.join(', ') || '');
       setHasChanges(false);
+
+      // Fetch existing checklist
+      if (token) {
+        api.tasks.checklist(task.id, token).then((items: any[]) => {
+          if (items && items.length > 0) {
+            setChecklist(items.map((item: any) => ({
+              id: item.id,
+              title: item.title,
+              completed: item.completed,
+            })));
+          }
+        }).catch(() => {});
+      }
     }
-  }, [task, isEditMode]);
+  }, [task, isEditMode, token]);
 
   // ─── Reset form for add mode ─────────────────────────────────────────────
 
@@ -277,6 +291,19 @@ export default function TaskModal({
 
       const result = await onSave(data);
 
+      // Sync checklist items on edit mode
+      if (result !== false && isEditMode && task && token && checklist.length > 0) {
+        // Add new checklist items via API
+        for (const item of checklist) {
+          if (!item.id) {
+            await api.tasks.addChecklist(task.id, item.title, token).catch(() => {});
+          } else {
+            // Toggle completed state if changed
+            await api.tasks.toggleChecklist(task.id, item.id, item.completed, token).catch(() => {});
+          }
+        }
+      }
+
       if (result === false) {
         // onSave returned false, don't close
         return;
@@ -330,16 +357,19 @@ export default function TaskModal({
 
   const addChecklistItem = () => {
     setChecklist(prev => [...prev, { title: '', completed: false }]);
+    setHasChanges(true);
   };
 
   const updateChecklistItem = (index: number, field: keyof ChecklistItem, value: string | boolean) => {
     setChecklist(prev =>
       prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
     );
+    setHasChanges(true);
   };
 
   const removeChecklistItem = (index: number) => {
     setChecklist(prev => prev.filter((_, i) => i !== index));
+    setHasChanges(true);
   };
 
   // ─── Render helpers ──────────────────────────────────────────────────────
