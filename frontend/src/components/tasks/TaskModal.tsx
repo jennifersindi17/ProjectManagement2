@@ -312,21 +312,8 @@ export default function TaskModal({
         return;
       }
 
-      // Close first, then sync checklist (fire-and-forget)
-      onClose();
-
-      // Sync checklist items (fire-and-forget after close)
-      if (isEditMode && task && token && checklist.length > 0) {
-        checklist.forEach(async (item) => {
-          try {
-            if (!item.id) {
-              await api.tasks.addChecklist(task.id, item.title, token);
-            } else {
-              await api.tasks.toggleChecklist(task.id, item.id, item.completed, token);
-            }
-          } catch {}
-        });
-      }
+      // onSave already calls setTaskModal(null) which unmounts this component
+      // Do NOT call onClose() here to avoid double state update
     } catch (err: any) {
       if (mountedRef.current) {
         setErrors({ form: err.message || 'Failed to save task' });

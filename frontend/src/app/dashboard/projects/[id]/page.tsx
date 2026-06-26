@@ -445,6 +445,18 @@ function TasksTab({ tasks, projectId, token, onTaskCreated, users }: any) {
         await api.tasks.create({ ...data, projectId }, token);
       } else if (taskModal?.mode === 'edit' && taskModal.task) {
         await api.tasks.update(taskModal.task.id, data, token);
+        // Sync checklist items for edited task
+        if (data.checklist && data.checklist.length > 0) {
+          for (const item of data.checklist) {
+            try {
+              if (!item.id) {
+                await api.tasks.addChecklist(taskModal.task.id, item.title, token);
+              } else {
+                await api.tasks.toggleChecklist(taskModal.task.id, item.id, item.completed, token);
+              }
+            } catch {}
+          }
+        }
       }
       setTaskModal(null);
       await refresh();
