@@ -13,6 +13,12 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 export class TasksController {
   constructor(private readonly service: TasksService) {}
 
+  // === Gantt Chart (must be before :id routes) ===
+  @Get('gantt') @ApiOperation({ summary: 'Get Gantt chart data with hierarchy and dependencies' })
+  getGanttData(@Query('projectId') projectId: string) {
+    return this.service.getGanttData(projectId);
+  }
+
   // === Existing CRUD ===
   @Get() @ApiOperation({ summary: 'List all tasks' })
   findAll(

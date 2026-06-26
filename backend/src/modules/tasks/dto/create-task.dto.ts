@@ -17,4 +17,5 @@ export class CreateTaskDto {
   @ApiPropertyOptional() @IsOptional() @IsNumber() storyPoints?: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber() estimatedHours?: number;
   @ApiPropertyOptional() @IsOptional() @IsDateString() dueDate?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString({ each: true }) dependsOn?: string[];
 }

@@ -416,4 +416,69 @@ export class TasksService {
     await this.repo.update(taskId, { assigneeId });
     return this.findOne(taskId);
   }
+
+  // === Gantt Chart Data ===
+  async getGanttData(projectId?: string) {
+    let where = 'WHERE t.deleted_at IS NULL';
+    const params: any[] = [];
+    if (projectId) {
+      params.push(projectId);
+      where += ` AND t.project_id = $${params.length}`;
+    }
+
+    const result = await this.repo.query(
+      `SELECT
+        t.id, t.task_code, t.title, t.description, t.status, t.priority, t.task_type,
+        t.project_id, p.name AS project_name, p.code AS project_code,
+        p.completion_percentage AS project_completion,
+        t.assignee_id, a.first_name AS assignee_first_name, a.last_name AS assignee_last_name,
+        a.avatar_url AS assignee_avatar,
+        t.reporter_id, r.first_name AS reporter_first_name, r.last_name AS reporter_last_name,
+        t.start_date, t.due_date, t.estimated_hours, t.actual_hours,
+        t.completion_percentage, t.story_points, t.parent_task_id, t.sprint_id,
+        t.depends_on, t.labels, t.metadata, t.created_at, t.updated_at
+      FROM tasks t
+      LEFT JOIN projects p ON p.id = t.project_id
+      LEFT JOIN users a ON a.id = t.assignee_id
+      LEFT JOIN users r ON r.id = t.reporter_id
+      ${where}
+      ORDER BY t.start_date ASC NULLS LAST, t.position ASC`,
+      params,
+    );
+
+    return result.map((row: any) => ({
+      id: row.id,
+      taskCode: row.task_code,
+      title: row.title,
+      description: row.description,
+      status: row.status,
+      priority: row.priority,
+      taskType: row.task_type,
+      projectName: row.project_name || '',
+      projectCode: row.project_code || '',
+      projectCompletion: Number(row.project_completion) || 0,
+      assigneeId: row.assignee_id,
+      assigneeName: row.assignee_first_name
+        ? `${row.assignee_first_name} ${row.assignee_last_name || ''}`.trim()
+        : null,
+      assigneeAvatar: row.assignee_avatar || null,
+      reporterName: row.reporter_first_name
+        ? `${row.reporter_first_name} ${row.reporter_last_name || ''}`.trim()
+        : null,
+      startDate: row.start_date,
+      dueDate: row.due_date,
+      estimatedHours: row.estimated_hours ? Number(row.estimated_hours) : null,
+      actualHours: row.actual_hours ? Number(row.actual_hours) : 0,
+      completionPercentage: Number(row.completion_percentage) || 0,
+      storyPoints: row.story_points ? Number(row.story_points) : null,
+      parentTaskId: row.parent_task_id,
+      sprintId: row.sprint_id,
+      projectId: row.project_id,
+      dependsOn: row.depends_on || [],
+      labels: row.labels || [],
+      metadata: row.metadata || {},
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  }
 }
