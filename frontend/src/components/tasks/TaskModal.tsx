@@ -248,26 +248,7 @@ export default function TaskModal({
     isOpen,
   ]);
 
-  // ─── Validation ──────────────────────────────────────────────────────────
 
-  const validate = (): boolean => {
-    const newErrors: Record<string, string> = {};
-
-    if (!title.trim()) {
-      newErrors.title = 'Task name is required';
-    }
-
-    if (startDate && dueDate && new Date(dueDate) < new Date(startDate)) {
-      newErrors.dueDate = 'Due date cannot be before start date';
-    }
-
-    if (completionPercentage < 0 || completionPercentage > 100) {
-      newErrors.completionPercentage = 'Progress must be between 0 and 100';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
 
   // ─── Save handler ────────────────────────────────────────────────────────
 
@@ -277,17 +258,27 @@ export default function TaskModal({
     return () => { mountedRef.current = false; };
   }, []);
 
-  const handleSave = async () => {
-    if (!validate()) return;
+  const handleSave = useCallback(async () => {
+    // Validate
+    if (!title.trim()) {
+      setErrors({ title: 'Task name is required' });
+      return;
+    }
+    if (startDate && dueDate && new Date(dueDate) < new Date(startDate)) {
+      setErrors({ dueDate: 'Due date cannot be before start date' });
+      return;
+    }
 
     setSaving(true);
+    setErrors({});
+
     try {
       const tags = tagsInput
         .split(',')
         .map(t => t.trim())
         .filter(Boolean);
 
-      const data: TaskSaveData = {
+      const data = {
         title: title.trim(),
         description: description.trim() || undefined,
         status,
@@ -311,9 +302,6 @@ export default function TaskModal({
       if (result === false) {
         return;
       }
-
-      // onSave already calls setTaskModal(null) which unmounts this component
-      // Do NOT call onClose() here to avoid double state update
     } catch (err: any) {
       if (mountedRef.current) {
         setErrors({ form: err.message || 'Failed to save task' });
@@ -323,7 +311,9 @@ export default function TaskModal({
         setSaving(false);
       }
     }
-  };
+  }, [title, description, status, priority, taskType, assigneeId, reporterId,
+      startDate, dueDate, estimatedHours, actualHours, completionPercentage,
+      parentTaskId, tagsInput, projectId, checklist, onSave]);
 
   // ─── Close handler with unsaved changes check ────────────────────────────
 
