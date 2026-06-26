@@ -111,7 +111,7 @@ export default function TaskModal({
   task,
   projectId,
   token,
-  users,
+  users = [],
   parentTasks = [],
   mode: modalMode,
 }: TaskModalProps) {
