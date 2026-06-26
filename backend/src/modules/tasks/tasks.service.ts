@@ -109,12 +109,67 @@ export class TasksService {
     return this.repo.save(task);
   }
 
-  async update(id: string, dto: UpdateTaskDto) {
-    await this.findOne(id);
-    const updateData: any = { ...dto };
-    if (dto.status === 'done') updateData.completedAt = new Date();
+  async update(id: string, dto: UpdateTaskDto, userId?: string) {
+    const existing = await this.findOne(id);
+    const updateData: any = {};
+
+    // Only include fields that were actually provided
+    if (dto.title !== undefined) updateData.title = dto.title;
+    if (dto.description !== undefined) updateData.description = dto.description;
+    if (dto.status !== undefined) {
+      updateData.status = dto.status;
+      if (dto.status === 'done') updateData.completedAt = new Date();
+    }
+    if (dto.priority !== undefined) updateData.priority = dto.priority;
+    if (dto.taskType !== undefined) updateData.taskType = dto.taskType;
+    if (dto.assigneeId !== undefined) updateData.assigneeId = dto.assigneeId;
+    if (dto.storyPoints !== undefined) updateData.storyPoints = dto.storyPoints;
+    if (dto.estimatedHours !== undefined) updateData.estimatedHours = dto.estimatedHours;
+    if (dto.actualHours !== undefined) updateData.actualHours = dto.actualHours;
+    if (dto.dueDate !== undefined) updateData.dueDate = dto.dueDate;
+    if (dto.startDate !== undefined) updateData.startDate = dto.startDate;
+    if (dto.completionPercentage !== undefined) updateData.completionPercentage = dto.completionPercentage;
+    if (dto.labels !== undefined) updateData.labels = dto.labels;
+    if (dto.parentTaskId !== undefined) updateData.parentTaskId = dto.parentTaskId;
+    if (dto.dependsOn !== undefined) updateData.dependsOn = dto.dependsOn;
+    if (dto.sprintId !== undefined) updateData.sprintId = dto.sprintId;
+
     await this.repo.update(id, updateData);
+
+    // Log activity if userId provided
+    if (userId) {
+      const changes = this.buildChangeLog(existing, dto);
+      if (changes.length > 0) {
+        await this.repo.query(
+          `INSERT INTO audit_logs (entity_type, entity_id, action, details, user_id, created_at)
+           VALUES ('task', $1, 'task_updated', $2, $3, NOW())`,
+          [id, JSON.stringify({ changes }), userId],
+        );
+      }
+    }
+
     return this.findOne(id);
+  }
+
+  private buildChangeLog(existing: any, dto: UpdateTaskDto): { field: string; from: any; to: any }[] {
+    const changes: { field: string; from: any; to: any }[] = [];
+    const fieldLabels: Record<string, string> = {
+      title: 'Task Name', description: 'Description', status: 'Status',
+      priority: 'Priority', taskType: 'Task Type', assigneeId: 'Assignee',
+      storyPoints: 'Story Points', estimatedHours: 'Estimated Hours',
+      actualHours: 'Actual Hours', dueDate: 'Due Date', startDate: 'Start Date',
+      completionPercentage: 'Progress', labels: 'Labels', parentTaskId: 'Parent Task',
+      dependsOn: 'Dependencies', sprintId: 'Sprint',
+    };
+
+    for (const [field, label] of Object.entries(fieldLabels)) {
+      const oldVal = (existing as any)[field];
+      const newVal = (dto as any)[field];
+      if (newVal !== undefined && JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+        changes.push({ field: label, from: oldVal ?? '-', to: newVal ?? '-' });
+      }
+    }
+    return changes;
   }
 
   async remove(id: string) {

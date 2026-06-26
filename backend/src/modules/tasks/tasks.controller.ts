@@ -51,8 +51,8 @@ export class TasksController {
   }
 
   @Patch(':id') @ApiOperation({ summary: 'Update task' })
-  update(@Param('id') id: string, @Body() dto: UpdateTaskDto) {
-    return this.service.update(id, dto);
+  update(@Param('id') id: string, @Body() dto: UpdateTaskDto, @CurrentUser('id') userId: string) {
+    return this.service.update(id, dto, userId);
   }
 
   @Delete(':id') @ApiOperation({ summary: 'Delete task' })

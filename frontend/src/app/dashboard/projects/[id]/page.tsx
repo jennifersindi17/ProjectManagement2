@@ -5,7 +5,8 @@ import { useAuth } from '@/store/auth';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import Link from 'next/link';
-import { ArrowLeft, Plus, Calendar, Users, AlertTriangle, FileText, DollarSign, Activity, Clock, Target, TrendingUp, BarChart3 } from 'lucide-react';
+import { ArrowLeft, Plus, Calendar, Users, AlertTriangle, FileText, DollarSign, Activity, Clock, Target, TrendingUp, BarChart3, MoreVertical, Edit3, Copy, Trash2, Eye, User as UserIcon } from 'lucide-react';
+import TaskModal from '@/components/tasks/TaskModal';
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: BarChart3 },
@@ -35,13 +36,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [changeRequests, setChangeRequests] = useState<any[]>([]);
   const [documents, setDocuments] = useState<any[]>([]);
   const [budget, setBudget] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     try {
-      const [proj, ov, tsk, iss, rsk, mtg, cr, doc, bud] = await Promise.all([
+      const [proj, ov, tsk, iss, rsk, mtg, cr, doc, bud, usr] = await Promise.all([
         api.projects.get(id, token),
         api.projects.overview(id, token).catch(() => null),
         api.tasks.list({ projectId: id }, token).catch((e: any) => ({ data: [] })),
@@ -51,6 +53,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         api.changeRequests.list({ projectId: id }, token).catch((e: any) => ({ data: [] })),
         api.documents.list({ projectId: id }, token).catch((e: any) => ({ data: [] })),
         api.budget.list(id, token).catch((e: any) => ({ data: [] })),
+        api.users.list({}, token).catch(() => ({ data: [] })),
       ]);
       setProject(proj);
       setOverview(ov);
@@ -61,6 +64,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       setChangeRequests((cr as any).data || []);
       setDocuments((doc as any).data || []);
       setBudget((bud as any).data || []);
+      setUsers((usr as any).data || []);
     } catch (err) {
       console.error('Failed to load project:', err);
     } finally {
@@ -343,115 +347,284 @@ function OverviewTab({ project, overview, stats, issues, risks, tasks }: any) {
 }
 
 /* ============ TASKS TAB ============ */
-function TasksTab({ tasks, projectId, token, onTaskCreated }: any) {
-  const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ title: '', description: '', priority: 'medium', status: 'backlog', assigneeId: '', dueDate: '' });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
+const statusColors: any = {
+  backlog: 'bg-gray-500', todo: 'bg-yellow-500', in_progress: 'bg-blue-500',
+  review: 'bg-purple-500', testing: 'bg-orange-500', done: 'bg-green-500', blocked: 'bg-red-500',
+};
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.title.trim()) return;
-    if (!token) { setError('No authentication token'); return; }
+const STATUS_OPTIONS = ['backlog', 'todo', 'in_progress', 'review', 'testing', 'done', 'blocked'];
+
+function TasksTab({ tasks, projectId, token, onTaskCreated, users }: any) {
+  const [taskModal, setTaskModal] = useState<{ mode: string; task?: any } | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [openStatusId, setOpenStatusId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const refresh = useCallback(async () => {
+    if (onTaskCreated) await onTaskCreated();
+  }, [onTaskCreated]);
+
+  const handleStatusChange = async (taskId: string, newStatus: string) => {
+    if (!token) return;
     setSaving(true);
-    setError('');
     try {
-      const payload: any = { title: form.title, projectId };
-      if (form.description) payload.description = form.description;
-      if (form.priority) payload.priority = form.priority;
-      if (form.status) payload.status = form.status;
-      if (form.assigneeId) payload.assigneeId = form.assigneeId;
-      if (form.dueDate) payload.dueDate = form.dueDate;
-      await api.tasks.create(payload, token);
-      setShowModal(false);
-      setForm({ title: '', description: '', priority: 'medium', status: 'backlog', assigneeId: '', dueDate: '' });
-      if (onTaskCreated) await onTaskCreated();
+      await api.tasks.update(taskId, { status: newStatus }, token);
+      setOpenStatusId(null);
+      setOpenMenuId(null);
+      await refresh();
     } catch (err: any) {
-      setError(err.message || 'Failed to create task');
+      console.error('Failed to update status:', err);
     } finally {
       setSaving(false);
     }
   };
 
-  const statusColors: any = {
-    backlog: 'bg-gray-500', todo: 'bg-yellow-500', in_progress: 'bg-blue-500',
-    review: 'bg-purple-500', testing: 'bg-orange-500', done: 'bg-green-500', blocked: 'bg-red-500',
+  const handleDuplicate = async (task: any) => {
+    if (!token) return;
+    setSaving(true);
+    try {
+      const { id, ...rest } = task;
+      await api.tasks.create({ ...rest, projectId }, token);
+      setOpenMenuId(null);
+      await refresh();
+    } catch (err: any) {
+      console.error('Failed to duplicate task:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (taskId: string) => {
+    if (!token) return;
+    setSaving(true);
+    try {
+      await api.tasks.delete(taskId, token);
+      setConfirmDeleteId(null);
+      setOpenMenuId(null);
+      await refresh();
+    } catch (err: any) {
+      console.error('Failed to delete task:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openViewModal = (task: any) => {
+    setTaskModal({ mode: 'view', task });
+    setOpenMenuId(null);
+  };
+
+  const openEditModal = (task: any) => {
+    setTaskModal({ mode: 'edit', task });
+    setOpenMenuId(null);
+  };
+
+  const openAddSubtask = (task: any) => {
+    setTaskModal({ mode: 'add', task: { ...task, parentTaskId: task.id } });
+    setOpenMenuId(null);
+  };
+
+  const handleModalSave = async (data: any): Promise<boolean> => {
+    if (!token) return false;
+    setSaving(true);
+    try {
+      if (taskModal?.mode === 'add') {
+        await api.tasks.create({ ...data, projectId }, token);
+      } else if (taskModal?.mode === 'edit' && taskModal.task) {
+        await api.tasks.update(taskModal.task.id, data, token);
+      }
+      setTaskModal(null);
+      await refresh();
+      return true;
+    } catch (err: any) {
+      console.error('Failed to save task:', err);
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const getAssigneeName = (assigneeId: string) => {
+    if (!assigneeId || !users) return null;
+    const user = users.find((u: any) => u.id === assigneeId);
+    if (!user) return null;
+    return `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || null;
   };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="font-semibold">Tasks ({tasks.length})</h3>
-        <button className="btn btn-primary btn-sm" onClick={() => setShowModal(true)}>
+        <button className="btn btn-primary btn-sm" onClick={() => setTaskModal({ mode: 'add', task: { projectId } })}>
           <Plus className="w-4 h-4 mr-1" /> Add Task
         </button>
       </div>
 
       <div className="space-y-2">
         {tasks.map((task: any) => (
-          <div key={task.id} className="card p-3 flex items-center gap-3">
-            <div className={`w-2 h-2 rounded-full ${statusColors[task.status] || 'bg-gray-500'}`} />
+          <div
+            key={task.id}
+            className="card p-3 flex items-center gap-3 relative cursor-pointer hover:bg-muted/50 transition-colors"
+            onDoubleClick={() => openEditModal(task)}
+          >
+            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${statusColors[task.status] || 'bg-gray-500'}`} />
             <div className="flex-1 min-w-0">
               <p className="font-medium text-sm truncate">{task.title}</p>
-              <p className="text-xs text-muted-foreground">{task.taskCode}</p>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                <span>{task.taskCode}</span>
+                {getAssigneeName(task.assigneeId) && (
+                  <span className="flex items-center gap-1">
+                    <UserIcon className="w-3 h-3" /> {getAssigneeName(task.assigneeId)}
+                  </span>
+                )}
+                {task.dueDate && (
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3 h-3" /> {formatDate(task.dueDate)}
+                  </span>
+                )}
+              </div>
+              {task.completionPercentage !== undefined && task.completionPercentage !== null && (
+                <div className="flex items-center gap-2 mt-1">
+                  <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-foreground rounded-full transition-all"
+                      style={{ width: `${Math.min(100, Math.max(0, task.completionPercentage))}%` }}
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground">{task.completionPercentage}%</span>
+                </div>
+              )}
             </div>
             <span className="badge badge-sm">{task.priority}</span>
             <span className={`badge badge-sm ${statusColors[task.status]?.replace('bg-', 'badge-') || ''}`}>{task.status?.replace('_', ' ')}</span>
+
+            {/* Three-dot menu */}
+            <div className="relative flex-shrink-0">
+              <button
+                className="p-1 hover:bg-muted rounded"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenMenuId(openMenuId === task.id ? null : task.id);
+                  setOpenStatusId(null);
+                }}
+              >
+                <MoreVertical className="w-4 h-4" />
+              </button>
+              {openMenuId === task.id && (
+                <div className="absolute right-0 top-full mt-1 w-48 bg-card border rounded-lg shadow-lg z-10 py-1">
+                  <button
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                    onClick={() => openViewModal(task)}
+                  >
+                    <Eye className="w-4 h-4" /> View Task
+                  </button>
+                  <button
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                    onClick={() => openEditModal(task)}
+                  >
+                    <Edit3 className="w-4 h-4" /> Edit Task
+                  </button>
+                  <button
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                    onClick={() => handleDuplicate(task)}
+                  >
+                    <Copy className="w-4 h-4" /> Duplicate Task
+                  </button>
+                  <button
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
+                    onClick={() => openAddSubtask(task)}
+                  >
+                    <Plus className="w-4 h-4" /> Add Subtask
+                  </button>
+
+                  {/* Change Status submenu */}
+                  <div className="relative">
+                    <button
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2 justify-between"
+                      onClick={() => setOpenStatusId(openStatusId === task.id ? null : task.id)}
+                    >
+                      <span className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4" /> Change Status
+                      </span>
+                    </button>
+                    {openStatusId === task.id && (
+                      <div className="absolute right-full top-0 mr-1 w-40 bg-card border rounded-lg shadow-lg z-10 py-1">
+                        {STATUS_OPTIONS.map((status: string) => (
+                          <button
+                            key={status}
+                            className={`w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2 ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            disabled={saving}
+                            onClick={() => handleStatusChange(task.id, status)}
+                          >
+                            <div className={`w-2 h-2 rounded-full ${statusColors[status]}`} />
+                            {status.replace('_', ' ')}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="border-t my-1" />
+                  <button
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2 text-red-500"
+                    onClick={() => {
+                      setOpenMenuId(null);
+                      setConfirmDeleteId(task.id);
+                    }}
+                  >
+                    <Trash2 className="w-4 h-4" /> Delete Task
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Delete confirmation dialog */}
+            {confirmDeleteId === task.id && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                <div className="bg-card rounded-xl shadow-xl w-full max-w-sm p-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <AlertTriangle className="w-5 h-5 text-red-500" />
+                    <h3 className="font-semibold">Delete Task</h3>
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-6">Are you sure you want to delete this task? This action cannot be undone.</p>
+                  <div className="flex justify-end gap-2">
+                    <button className="btn btn-ghost" disabled={saving} onClick={() => setConfirmDeleteId(null)}>Cancel</button>
+                    <button className="btn btn-primary bg-red-500 hover:bg-red-600" disabled={saving} onClick={() => handleDelete(task.id)}>
+                      {saving ? 'Deleting...' : 'OK'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ))}
         {tasks.length === 0 && <p className="text-center text-muted-foreground py-8">No tasks yet</p>}
       </div>
 
-      {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card rounded-xl shadow-xl w-full max-w-md">
-            <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="font-semibold">New Task</h3>
-              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-muted rounded">✕</button>
-            </div>
-            <form onSubmit={handleCreate} className="p-4 space-y-3">
-              {error && <div className="bg-red-500/10 text-red-500 text-sm p-3 rounded-lg">{error}</div>}
-              <div>
-                <label className="label">Title *</label>
-                <input className="input" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} required />
-              </div>
-              <div>
-                <label className="label">Description</label>
-                <textarea className="input min-h-[60px]" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Priority</label>
-                  <select className="select" value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })}>
-                    <option value="critical">Critical</option>
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Status</label>
-                  <select className="select" value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
-                    <option value="backlog">Backlog</option>
-                    <option value="todo">To Do</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="review">Review</option>
-                    <option value="testing">Testing</option>
-                    <option value="done">Done</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="label">Due Date</label>
-                <input type="date" className="input" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} />
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" className="btn btn-ghost" onClick={() => setShowModal(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Creating...' : 'Create'}</button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {/* TaskModal */}
+      {taskModal && (
+        <TaskModal
+          isOpen={!!taskModal}
+          mode={taskModal.mode as 'add' | 'edit' | 'view'}
+          task={taskModal.task}
+          users={users}
+          token={token}
+          projectId={projectId}
+          onClose={() => setTaskModal(null)}
+          onSave={handleModalSave}
+        />
+      )}
+
+      {/* Click-away handler for menus */}
+      {openMenuId && (
+        <div
+          className="fixed inset-0 z-0"
+          onClick={() => {
+            setOpenMenuId(null);
+            setOpenStatusId(null);
+          }}
+        />
       )}
     </div>
   );
