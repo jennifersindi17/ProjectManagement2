@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { ArrowLeft, Plus, Calendar, Users, AlertTriangle, FileText, DollarSign, Activity, Clock, Target, TrendingUp, BarChart3, MoreVertical, Edit3, Copy, Trash2, Eye, User as UserIcon } from 'lucide-react';
 import TaskModal from '@/components/tasks/TaskModal';
 import TaskDetailDrawer from '@/components/tasks/TaskDetailDrawer';
+import DuplicateTaskModal from '@/components/tasks/DuplicateTaskModal';
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: BarChart3 },
@@ -362,6 +363,7 @@ function TasksTab({ tasks, projectId, token, onTaskCreated, users }: any) {
   const [openStatusId, setOpenStatusId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [duplicateTask, setDuplicateTask] = useState<any>(null);
 
   const refresh = useCallback(async () => {
     if (onTaskCreated) await onTaskCreated();
@@ -382,19 +384,9 @@ function TasksTab({ tasks, projectId, token, onTaskCreated, users }: any) {
     }
   };
 
-  const handleDuplicate = async (task: any) => {
-    if (!token) return;
-    setSaving(true);
-    try {
-      const { id, ...rest } = task;
-      await api.tasks.create({ ...rest, projectId }, token);
-      setOpenMenuId(null);
-      await refresh();
-    } catch (err: any) {
-      console.error('Failed to duplicate task:', err);
-    } finally {
-      setSaving(false);
-    }
+  const handleDuplicate = (task: any) => {
+    setOpenMenuId(null);
+    setDuplicateTask(task);
   };
 
   const handleDelete = async (taskId: string) => {
@@ -652,9 +644,28 @@ function TasksTab({ tasks, projectId, token, onTaskCreated, users }: any) {
           isOpen={!!viewTaskId}
           onClose={() => setViewTaskId(null)}
           onEdit={handleEditFromDrawer}
+          onDuplicate={(task) => {
+            setViewTaskId(null);
+            setDuplicateTask(task);
+          }}
           onOpenTaskCenter={handleOpenTaskCenter}
           taskId={viewTaskId}
           token={token}
+        />
+      )}
+
+      {/* Duplicate Task Modal */}
+      {duplicateTask && (
+        <DuplicateTaskModal
+          isOpen={!!duplicateTask}
+          onClose={() => setDuplicateTask(null)}
+          onSuccess={async () => {
+            await refresh();
+          }}
+          task={duplicateTask}
+          projectId={projectId}
+          token={token}
+          users={users}
         />
       )}
 

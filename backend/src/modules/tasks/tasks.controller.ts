@@ -149,4 +149,9 @@ export class TasksController {
   reassign(@Param('id') id: string, @Body() body: { assigneeId: string }, @CurrentUser('id') userId: string) {
     return this.service.reassign(id, body.assigneeId, userId);
   }
+
+  @Post(':id/duplicate') @ApiOperation({ summary: 'Duplicate a task' })
+  duplicate(@Param('id') id: string, @Body() body: any, @CurrentUser('id') userId: string) {
+    return this.service.duplicate(id, body, userId);
+  }
 }

@@ -484,6 +484,83 @@ export class TasksService {
     return this.findOne(taskId);
   }
 
+  // === Duplicate Task ===
+  async duplicate(taskId: string, overrides: {
+    title?: string;
+    assigneeId?: string;
+    startDate?: string;
+    dueDate?: string;
+    taskType?: string;
+  }, userId: string) {
+    const original = await this.findOne(taskId);
+
+    // Get new task code
+    const count = await this.repo.count({ where: { projectId: original.projectId } });
+    const project = await this.repo.query('SELECT code FROM projects WHERE id = $1', [original.projectId]);
+    const code = project.length > 0
+      ? `${project[0].code}-${String(count + 1).padStart(4, '0')}`
+      : `TSK-${String(count + 1).padStart(4, '0')}`;
+
+    // Build new task from original, excluding fields that should NOT be copied
+    const newTask = this.repo.create({
+      projectId: original.projectId,
+      sprintId: original.sprintId,
+      parentTaskId: original.parentTaskId,
+      taskCode: code,
+      title: overrides.title || `${original.title} (Copy)`,
+      description: original.description,
+      status: 'todo', // Always reset to todo
+      priority: original.priority,
+      taskType: overrides.taskType || original.taskType,
+      assigneeId: overrides.assigneeId || original.assigneeId,
+      reporterId: userId,
+      storyPoints: original.storyPoints,
+      estimatedHours: original.estimatedHours,
+      actualHours: 0, // Do NOT copy actual hours
+      dueDate: overrides.dueDate || original.dueDate,
+      startDate: overrides.startDate || original.startDate,
+      completionPercentage: 0, // Do NOT copy progress
+      labels: original.labels && Array.isArray(original.labels) && original.labels.length > 0 ? original.labels : null,
+      dependsOn: null, // simple-array has special serialization; skip to avoid malformed array literal
+      position: (original.position || 0) + 1,
+    });
+
+    const saved = await this.repo.save(newTask);
+
+    // Copy checklist items (reset completed to false for the new task)
+    const checklistItems = await this.getChecklist(taskId);
+    for (const item of checklistItems) {
+      await this.repo.query(
+        `INSERT INTO task_checklist_items (task_id, title, position, completed, created_at)
+         VALUES ($1, $2, $3, false, NOW())`,
+        [saved.id, item.title, item.position],
+      );
+    }
+
+    // Copy attachments (optional — reference only, no file duplication)
+    const attachments: any[] = await this.repo.query(
+      `SELECT file_name, file_url, file_size, mime_type, uploaded_by
+       FROM task_attachments WHERE task_id = $1 AND deleted_at IS NULL`,
+      [taskId],
+    );
+    for (const att of attachments) {
+      await this.repo.query(
+        `INSERT INTO task_attachments (task_id, file_name, file_url, file_size, mime_type, uploaded_by)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [saved.id, att.file_name, att.file_url, att.file_size, att.mime_type, att.uploaded_by],
+      );
+    }
+
+    // Log duplication activity
+    await this.repo.query(
+      `INSERT INTO task_activities (task_id, user_id, action, field_changed, old_value, new_value, created_at)
+       VALUES ($1, $2, 'duplication', 'task', $3, $4, NOW())`,
+      [saved.id, userId, original.id, saved.title],
+    );
+
+    return saved;
+  }
+
   // === Gantt Chart Data ===
   async getGanttData(projectId?: string) {
     let where = 'WHERE t.deleted_at IS NULL';

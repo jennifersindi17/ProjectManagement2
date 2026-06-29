@@ -30,10 +30,11 @@ import { api } from '@/lib/api';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-interface TaskDetailDrawerProps {
+export interface TaskDetailDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onEdit: (task: any) => void;
+  onDuplicate?: (task: any) => void;
   onOpenTaskCenter: (taskId: string) => void;
   taskId: string;
   token: string;
@@ -275,6 +276,7 @@ export default function TaskDetailDrawer({
   isOpen,
   onClose,
   onEdit,
+  onDuplicate,
   onOpenTaskCenter,
   taskId,
   token,
@@ -942,13 +944,24 @@ export default function TaskDetailDrawer({
             Close
           </button>
           {task && (
-            <button
-              onClick={() => onEdit(task)}
-              className="btn btn-primary flex items-center gap-1.5"
-            >
-              <Edit3 className="h-4 w-4" />
-              Edit Task
-            </button>
+            <>
+              {onDuplicate && (
+                <button
+                  onClick={() => onDuplicate(task)}
+                  className="btn btn-ghost flex items-center gap-1.5"
+                >
+                  <Copy className="h-4 w-4" />
+                  Duplicate
+                </button>
+              )}
+              <button
+                onClick={() => onEdit(task)}
+                className="btn btn-primary flex items-center gap-1.5"
+              >
+                <Edit3 className="h-4 w-4" />
+                Edit Task
+              </button>
+            </>
           )}
           <button
             onClick={() => onOpenTaskCenter(taskId)}
