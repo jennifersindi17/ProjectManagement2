@@ -19,6 +19,17 @@ export class TasksController {
     return this.service.getGanttData(projectId);
   }
 
+  // === Hierarchy (must be before :id routes) ===
+  @Get('tree/:projectId') @ApiOperation({ summary: 'Get full task tree for a project' })
+  getTaskTree(@Param('projectId') projectId: string) {
+    return this.service.getTaskTree(projectId);
+  }
+
+  @Get(':id/subtasks') @ApiOperation({ summary: 'Get subtasks of a task' })
+  getSubtasks(@Param('id') id: string) {
+    return this.service.getSubtasks(id);
+  }
+
   // === Existing CRUD ===
   @Get() @ApiOperation({ summary: 'List all tasks' })
   findAll(

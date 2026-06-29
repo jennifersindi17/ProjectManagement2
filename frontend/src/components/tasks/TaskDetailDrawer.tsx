@@ -25,19 +25,22 @@ import {
   Image as ImageIcon,
   FileSpreadsheet,
   FileText as PdfIcon,
+  GitBranch,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import AddSubtaskModal from '@/components/tasks/AddSubtaskModal';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
-
 export interface TaskDetailDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onEdit: (task: any) => void;
   onDuplicate?: (task: any) => void;
+  onAddSubtask?: (task: any) => void;
   onOpenTaskCenter: (taskId: string) => void;
   taskId: string;
   token: string;
+  users?: any[];
 }
 
 interface TaskDetail {
@@ -99,8 +102,10 @@ interface ActivityItem {
 interface Subtask {
   id: string;
   title: string;
+  taskCode?: string;
   status: string;
   completionPercentage?: number;
+  dueDate?: string;
   assignee?: { firstName: string; lastName: string; avatar?: string } | null;
 }
 
@@ -277,9 +282,11 @@ export default function TaskDetailDrawer({
   onClose,
   onEdit,
   onDuplicate,
+  onAddSubtask,
   onOpenTaskCenter,
   taskId,
   token,
+  users: usersProp,
 }: TaskDetailDrawerProps) {
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
@@ -291,8 +298,20 @@ export default function TaskDetailDrawer({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showAddSubtask, setShowAddSubtask] = useState(false);
+  const [users, setUsers] = useState<any[]>(usersProp || []);
   const panelRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
+
+  // Fetch users if not provided via prop
+  useEffect(() => {
+    if (users.length === 0 && token && isOpen) {
+      api.users.list({}, token).then((res: any) => {
+        const userData = Array.isArray(res) ? res : res?.data || [];
+        setUsers(userData);
+      }).catch(() => {});
+    }
+  }, [token, isOpen, users.length]);
 
   // Fetch all data
   const fetchTaskData = useCallback(async () => {
@@ -807,33 +826,77 @@ export default function TaskDetailDrawer({
 
               {/* ─── SUBTASKS ──────────────────────────────────────────── */}
               <section>
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">
-                  Subtasks
-                </h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                    Subtasks ({subtasks.length})
+                  </h3>
+                  <button
+                    onClick={() => setShowAddSubtask(true)}
+                    className="btn btn-ghost text-xs h-7 px-2 flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" />
+                    Add Subtask
+                  </button>
+                </div>
+
                 {subtasks.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No subtasks</p>
+                  <div className="text-center py-6 border border-dashed border-border rounded-lg">
+                    <GitBranch className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">No subtasks yet</p>
+                    <button
+                      onClick={() => setShowAddSubtask(true)}
+                      className="mt-2 text-xs text-primary hover:underline"
+                    >
+                      + Add first subtask
+                    </button>
+                  </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-2 pl-3 border-l-2 border-purple-500/30 ml-1">
                     {subtasks.map((subtask) => (
                       <div
                         key={subtask.id}
-                        className="p-3 bg-secondary/50 rounded-lg space-y-2"
+                        className="p-3 bg-secondary/50 rounded-lg space-y-2 border border-border/50 hover:border-purple-500/30 transition-colors group"
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-sm font-medium truncate">
-                            {subtask.title}
-                          </span>
-                          {getStatusBadge(subtask.status)}
-                        </div>
-                        <ProgressBar percentage={subtask.completionPercentage || 0} />
-                        {subtask.assignee && (
-                          <div className="flex items-center gap-1.5">
-                            <Avatar user={subtask.assignee} />
-                            <span className="text-xs text-muted-foreground">
-                              {subtask.assignee.firstName} {subtask.assignee.lastName}
-                            </span>
+                        {/* Nested visual connector */}
+                        <div className="flex items-start gap-2">
+                          <div className="w-3 h-3 mt-0.5 shrink-0 flex items-center justify-center">
+                            <GitBranch className="w-3.5 h-3.5 text-purple-500/60" />
                           </div>
-                        )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-sm font-medium truncate">
+                                {subtask.taskCode && (
+                                  <span className="text-muted-foreground/50 text-xs mr-1">{subtask.taskCode}</span>
+                                )}
+                                {subtask.title}
+                              </span>
+                              <div className="flex items-center gap-2 shrink-0">
+                                {getStatusBadge(subtask.status)}
+                                <span className="text-xs text-muted-foreground">
+                                  {subtask.completionPercentage || 0}%
+                                </span>
+                              </div>
+                            </div>
+                            <ProgressBar percentage={subtask.completionPercentage || 0} />
+                            <div className="flex items-center justify-between mt-1">
+                              {subtask.assignee ? (
+                                <div className="flex items-center gap-1.5">
+                                  <Avatar user={subtask.assignee} />
+                                  <span className="text-xs text-muted-foreground">
+                                    {subtask.assignee.firstName} {subtask.assignee.lastName}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground/50 italic">Unassigned</span>
+                              )}
+                              {subtask.dueDate && (
+                                <span className="text-xs text-muted-foreground">
+                                  Due: {formatDate(subtask.dueDate)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -945,6 +1008,13 @@ export default function TaskDetailDrawer({
           </button>
           {task && (
             <>
+              <button
+                onClick={() => setShowAddSubtask(true)}
+                className="btn btn-ghost flex items-center gap-1.5"
+              >
+                <Plus className="h-4 w-4" />
+                Add Subtask
+              </button>
               {onDuplicate && (
                 <button
                   onClick={() => onDuplicate(task)}
@@ -972,6 +1042,27 @@ export default function TaskDetailDrawer({
           </button>
         </div>
       </div>
+
+      {/* Add Subtask Modal */}
+      {showAddSubtask && task && (
+        <AddSubtaskModal
+          isOpen={showAddSubtask}
+          onClose={() => setShowAddSubtask(false)}
+          onSuccess={() => {
+            setShowAddSubtask(false);
+            fetchTaskData();
+          }}
+          parentTask={{
+            id: task.id,
+            title: task.title,
+            taskCode: task.taskCode || '',
+            projectId: task.projectId || '',
+            projectName: task.projectName,
+          }}
+          token={token}
+          users={users}
+        />
+      )}
     </>
   );
 }

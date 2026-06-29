@@ -112,6 +112,10 @@ export const api = {
     activity: (taskId: string, token: string): Promise<any[]> => apiFetch(`/tasks/${taskId}/activity`, { token }),
     duplicate: (taskId: string, data: any, token: string) =>
       apiFetch(`/tasks/${taskId}/duplicate`, { method: 'POST', body: data, token }),
+    subtasks: (taskId: string, token: string): Promise<any[]> =>
+      apiFetch(`/tasks/${taskId}/subtasks`, { token }),
+    taskTree: (projectId: string, token: string): Promise<any[]> =>
+      apiFetch(`/tasks/tree/${projectId}`, { token }),
     bulkStatus: (taskIds: string[], status: string, token: string) =>
       apiFetch('/tasks/bulk/status', { method: 'PATCH', body: { taskIds, status }, token }),
     bulkDelete: (taskIds: string[], token: string) =>

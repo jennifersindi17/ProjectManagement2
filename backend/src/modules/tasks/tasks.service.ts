@@ -105,8 +105,27 @@ export class TasksService {
     const code = project.length > 0
       ? `${project[0].code}-${String(count + 1).padStart(4, '0')}`
       : `TSK-${String(count + 1).padStart(4, '0')}`;
-    const task = this.repo.create({ ...dto, taskCode: code, reporterId: userId });
-    const saved = await this.repo.save(task);
+
+    // Use raw INSERT to avoid pg type inference issues with nullable UUID columns
+    const result = await this.repo.query(
+      `INSERT INTO tasks (project_id, parent_task_id, task_code, title, description, status, priority, task_type, reporter_id, depends_on)
+       VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::task_status, $7::task_priority, $8::task_type, $9::uuid, $10::text[])
+       RETURNING id, task_code, title, description, status, priority, task_type, project_id, parent_task_id, reporter_id, assignee_id,
+                 story_points, estimated_hours, actual_hours, due_date, start_date, completion_percentage, position, depends_on, created_at, updated_at`,
+      [
+        dto.projectId,
+        dto.parentTaskId || null,
+        code,
+        dto.title,
+        dto.description || null,
+        dto.status || 'backlog',
+        dto.priority || 'medium',
+        dto.taskType || 'task',
+        userId,
+        dto.dependsOn || null,
+      ],
+    );
+    const saved = result[0];
 
     // Log task creation activity
     await this.repo.query(
@@ -114,6 +133,11 @@ export class TasksService {
        VALUES ($1, $2, 'created', 'task', NULL, $3, NOW())`,
       [saved.id, userId, saved.title],
     );
+
+    // Recalculate parent progress if this is a subtask
+    if (dto.parentTaskId) {
+      await this.recalculateParentProgress(dto.parentTaskId);
+    }
 
     return saved;
   }
@@ -157,6 +181,23 @@ export class TasksService {
             [id, userId, change.field, String(change.from), String(change.to)],
           );
         }
+      }
+    }
+
+    // Recalculate parent progress if this was a subtask that changed
+    // (status, completionPercentage, estimatedHours can affect parent)
+
+    const existingParentId = existing.parentTaskId;
+    const fieldsAffectingProgress = ['status', 'completionPercentage', 'estimatedHours'];
+    const changedProgressField = fieldsAffectingProgress.some(f => (dto as any)[f] !== undefined);
+
+    if (changedProgressField) {
+      if (existingParentId) {
+        await this.recalculateParentProgress(existingParentId);
+      }
+      // Also handle case where parentTaskId itself changed
+      if (dto.parentTaskId && dto.parentTaskId !== existingParentId) {
+        await this.recalculateParentProgress(dto.parentTaskId);
       }
     }
 
@@ -559,6 +600,95 @@ export class TasksService {
     );
 
     return saved;
+  }
+
+  // === Hierarchy: Recalculate Parent Progress ===
+  private async recalculateParentProgress(parentTaskId: string) {
+    // Get all active subtasks of this parent
+    const subtasks = await this.repo.query(
+      `SELECT completion_percentage, estimated_hours, status
+       FROM tasks WHERE parent_task_id = $1 AND deleted_at IS NULL`,
+      [parentTaskId],
+    );
+
+    if (subtasks.length === 0) return;
+
+    // Weighted average by estimatedHours (fallback to equal weight if no estimates)
+    let totalWeight = 0;
+    let weightedProgress = 0;
+    for (const sub of subtasks) {
+      const est = parseFloat(sub.estimated_hours) || 0;
+      const weight = est > 0 ? est : 1; // equal weight if no estimate
+      totalWeight += weight;
+      weightedProgress += (parseFloat(sub.completion_percentage) || 0) * weight;
+    }
+
+    const newProgress = totalWeight > 0
+      ? Math.round((weightedProgress / totalWeight) * 100) / 100
+      : 0;
+
+    // Determine aggregated status
+    const statuses = subtasks.map((s: any) => s.status);
+    let aggStatus = 'todo';
+    if (statuses.every((s: string) => s === 'done' || s === 'cancelled')) {
+      aggStatus = 'done';
+    } else if (statuses.some((s: string) => s === 'in_progress' || s === 'review' || s === 'testing')) {
+      aggStatus = 'in_progress';
+    } else if (statuses.some((s: string) => s === 'blocked')) {
+      aggStatus = 'blocked';
+    }
+
+    await this.repo.query(
+      `UPDATE tasks SET completion_percentage = $1, status = $2::task_status,
+       completed_at = CASE WHEN $2::text = 'done' THEN NOW() ELSE NULL END,
+       updated_at = NOW()
+       WHERE id = $3::uuid`,
+      [newProgress, aggStatus, parentTaskId],
+    );
+  }
+
+  // === Hierarchy: Get Subtasks ===
+  async getSubtasks(parentTaskId: string) {
+    return this.repo.query(
+      `SELECT t.*,
+              u.first_name as assignee_first_name, u.last_name as assignee_last_name, u.avatar_url as assignee_avatar
+       FROM tasks t
+       LEFT JOIN users u ON t.assignee_id = u.id
+       WHERE t.parent_task_id = $1 AND t.deleted_at IS NULL
+       ORDER BY t.position ASC, t.created_at ASC`,
+      [parentTaskId],
+    );
+  }
+
+  // === Hierarchy: Get Full Task Tree ===
+  async getTaskTree(projectId: string) {
+    const allTasks = await this.repo.query(
+      `SELECT t.id, t.title, t.task_code, t.status, t.priority, t.task_type,
+              t.completion_percentage, t.parent_task_id, t.estimated_hours,
+              t.start_date, t.due_date, t.position
+       FROM tasks t
+       WHERE t.project_id = $1 AND t.deleted_at IS NULL
+       ORDER BY t.position ASC, t.created_at ASC`,
+      [projectId],
+    );
+
+    // Build tree
+    const taskMap = new Map();
+    allTasks.forEach((t: any) => {
+      taskMap.set(t.id, { ...t, children: [] });
+    });
+
+    const roots: any[] = [];
+    allTasks.forEach((t: any) => {
+      const node = taskMap.get(t.id);
+      if (t.parent_task_id && taskMap.has(t.parent_task_id)) {
+        taskMap.get(t.parent_task_id).children.push(node);
+      } else {
+        roots.push(node);
+      }
+    });
+
+    return roots;
   }
 
   // === Gantt Chart Data ===

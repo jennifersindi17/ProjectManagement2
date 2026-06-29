@@ -5,10 +5,11 @@ import { useAuth } from '@/store/auth';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import Link from 'next/link';
-import { ArrowLeft, Plus, Calendar, Users, AlertTriangle, FileText, DollarSign, Activity, Clock, Target, TrendingUp, BarChart3, MoreVertical, Edit3, Copy, Trash2, Eye, User as UserIcon } from 'lucide-react';
+import { ArrowLeft, Plus, Calendar, Users, AlertTriangle, FileText, DollarSign, Activity, Clock, Target, TrendingUp, BarChart3, MoreVertical, Edit3, Copy, Trash2, Eye, GitBranch, User as UserIcon } from 'lucide-react';
 import TaskModal from '@/components/tasks/TaskModal';
 import TaskDetailDrawer from '@/components/tasks/TaskDetailDrawer';
 import DuplicateTaskModal from '@/components/tasks/DuplicateTaskModal';
+import AddSubtaskModal from '@/components/tasks/AddSubtaskModal';
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: BarChart3 },
@@ -167,7 +168,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           tasks={tasks}
         />
       )}
-      {activeTab === 'tasks' && <TasksTab tasks={tasks} projectId={id} token={token || ''} onTaskCreated={() => loadData()} />}
+      {activeTab === 'tasks' && <TasksTab tasks={tasks} projectId={id} token={token || ''} onTaskCreated={() => loadData()} project={project} users={users} />}
       {activeTab === 'timeline' && <TimelineTab project={project} tasks={tasks} />}
       {activeTab === 'resources' && <ResourcesTab overview={overview} />}
       {activeTab === 'meetings' && <MeetingsTab meetings={meetings} />}
@@ -356,7 +357,7 @@ const statusColors: any = {
 
 const STATUS_OPTIONS = ['backlog', 'todo', 'in_progress', 'review', 'testing', 'done', 'blocked'];
 
-function TasksTab({ tasks, projectId, token, onTaskCreated, users }: any) {
+function TasksTab({ tasks, projectId, token, onTaskCreated, users, project }: any) {
   const [taskModal, setTaskModal] = useState<{ mode: string; task?: any } | null>(null);
   const [viewTaskId, setViewTaskId] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -424,8 +425,10 @@ function TasksTab({ tasks, projectId, token, onTaskCreated, users }: any) {
     setOpenMenuId(null);
   };
 
+  const [addSubtaskParent, setAddSubtaskParent] = useState<any>(null);
+
   const openAddSubtask = (task: any) => {
-    setTaskModal({ mode: 'add', task: { ...task, parentTaskId: task.id } });
+    setAddSubtaskParent(task);
     setOpenMenuId(null);
   };
 
@@ -483,15 +486,48 @@ function TasksTab({ tasks, projectId, token, onTaskCreated, users }: any) {
       </div>
 
       <div className="space-y-2">
-        {tasks.map((task: any) => (
+        {(() => {
+          // Sort: parents first, interleaved with subtasks
+          const sorted = [...tasks].sort((a, b) => {
+            const aParent = a.parentTaskId || '';
+            const bParent = b.parentTaskId || '';
+            // Root tasks by position, subtasks grouped under parent
+            if (!aParent && !bParent) return (a.position || 0) - (b.position || 0);
+            if (!aParent && bParent) {
+              // a is root, b is subtask — if b's parent is a, b goes after a
+              if (b.parentTaskId === a.id) return -1;
+              return (a.position || 0) - (tasks.find((t: any) => t.id === b.parentTaskId)?.position || 0);
+            }
+            if (aParent && !bParent) {
+              if (a.parentTaskId === b.id) return 1;
+              return (tasks.find((t: any) => t.id === aParent)?.position || 0) - (b.position || 0);
+            }
+            // Both subtasks — sort by parent position, then own position
+            const aRoot = tasks.find((t: any) => t.id === aParent);
+            const bRoot = tasks.find((t: any) => t.id === bParent);
+            if (aRoot && bRoot && aRoot.id !== bRoot.id) return (aRoot.position || 0) - (bRoot.position || 0);
+            return (a.position || 0) - (b.position || 0);
+          });
+          return sorted.map((task: any) => (
           <div
             key={task.id}
-            className="card p-3 flex items-center gap-3 relative cursor-pointer hover:bg-muted/50 transition-colors"
+            className={`card p-3 flex items-center gap-3 relative cursor-pointer hover:bg-muted/50 transition-colors ${task.parentTaskId ? 'ml-8 bg-secondary/30 border-l-2 border-l-purple-500/40' : ''}`}
             onDoubleClick={() => openEditModal(task)}
           >
-            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${statusColors[task.status] || 'bg-gray-500'}`} />
+            {task.parentTaskId && (
+              <div className="absolute left-[-2px] top-1/2 -translate-y-1/2 w-2 h-[1px] bg-purple-500/40" />
+            )}
+            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${task.parentTaskId ? 'bg-purple-500/60' : statusColors[task.status] || 'bg-gray-500'}`} />
             <div className="flex-1 min-w-0">
-              <p className="font-medium text-sm truncate">{task.title}</p>
+              <div className="flex items-center gap-2">
+                <p className="font-medium text-sm truncate">{task.title}</p>
+                {tasks.filter((t: any) => t.parentTaskId === task.id).length > 0 && (
+                  <span className="text-[10px] bg-purple-500/10 text-purple-500 px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shrink-0">
+                    <GitBranch className="w-2.5 h-2.5" />
+                    {tasks.filter((t: any) => t.parentTaskId === task.id).length}
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                 <span>{task.taskCode}</span>
                 {getAssigneeName(task.assigneeId) && (
@@ -619,7 +655,7 @@ function TasksTab({ tasks, projectId, token, onTaskCreated, users }: any) {
               </div>
             )}
           </div>
-        ))}
+        ))})()}
         {tasks.length === 0 && <p className="text-center text-muted-foreground py-8">No tasks yet</p>}
       </div>
 
@@ -669,6 +705,26 @@ function TasksTab({ tasks, projectId, token, onTaskCreated, users }: any) {
         />
       )}
 
+      {/* Add Subtask Modal */}
+      {addSubtaskParent && (
+        <AddSubtaskModal
+          isOpen={!!addSubtaskParent}
+          onClose={() => setAddSubtaskParent(null)}
+          onSuccess={async () => {
+            await refresh();
+          }}
+          parentTask={{
+            id: addSubtaskParent.id,
+            title: addSubtaskParent.title,
+            taskCode: addSubtaskParent.taskCode || '',
+            projectId: projectId || '',
+            projectName: project?.name,
+          }}
+          token={token}
+          users={users}
+        />
+      )}
+
       {/* Click-away handler for menus */}
       {openMenuId && (
         <div
@@ -686,9 +742,9 @@ function TasksTab({ tasks, projectId, token, onTaskCreated, users }: any) {
 /* ============ TIMELINE TAB ============ */
 function TimelineTab({ project, tasks }: any) {
   const events = [
-    { date: project.startDate, title: 'Project Start', type: 'start' },
+    { date: project?.startDate, title: 'Project Start', type: 'start' },
     ...tasks.map((t: any) => ({ date: t.dueDate || t.createdAt, title: t.title, type: 'task', status: t.status })),
-    { date: project.endDate, title: 'Target Go Live', type: 'end' },
+    { date: project?.endDate, title: 'Target Go Live', type: 'end' },
   ].filter((e: any) => e.date).sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   return (
