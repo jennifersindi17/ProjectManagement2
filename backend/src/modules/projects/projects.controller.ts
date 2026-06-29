@@ -1,7 +1,7 @@
-import { Controller, Get, Post, Patch, Delete, Param, Query, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Put, Param, Query, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ProjectsService } from './projects.service';
-import { CreateProjectDto } from './dto/create-project.dto';
+import { CreateProjectDto, UpdateProjectMembersDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -36,6 +36,18 @@ export class ProjectsController {
   @ApiOperation({ summary: 'Get project overview stats' })
   getOverview(@Param('id') id: string) {
     return this.service.getOverview(id);
+  }
+
+  @Get(':id/members')
+  @ApiOperation({ summary: 'Get project members' })
+  getMembers(@Param('id') id: string) {
+    return this.service.getMembers(id);
+  }
+
+  @Put(':id/members')
+  @ApiOperation({ summary: 'Update project members' })
+  updateMembers(@Param('id') id: string, @Body() dto: UpdateProjectMembersDto) {
+    return this.service.updateMembers(id, dto.memberIds);
   }
 
   @Post()

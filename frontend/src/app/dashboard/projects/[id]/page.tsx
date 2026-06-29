@@ -1,15 +1,17 @@
 'use client';
 
-import { useEffect, useState, useCallback, use } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/store/auth';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { ArrowLeft, Plus, Calendar, Users, AlertTriangle, FileText, DollarSign, Activity, Clock, Target, TrendingUp, BarChart3, MoreVertical, Edit3, Copy, Trash2, Eye, GitBranch, User as UserIcon } from 'lucide-react';
 import TaskModal from '@/components/tasks/TaskModal';
 import TaskDetailDrawer from '@/components/tasks/TaskDetailDrawer';
 import DuplicateTaskModal from '@/components/tasks/DuplicateTaskModal';
 import AddSubtaskModal from '@/components/tasks/AddSubtaskModal';
+import EditProjectModal from '@/components/projects/EditProjectModal';
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: BarChart3 },
@@ -26,9 +28,11 @@ const TABS = [
   { id: 'activity', label: 'Activity Log', icon: Activity },
 ];
 
-export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default function ProjectDetailPage() {
+  const params = useParams();
+  const id = params?.id as string || '';
   const { accessToken: token } = useAuth();
-  const { id } = use(params);
+
   const [activeTab, setActiveTab] = useState('overview');
   const [project, setProject] = useState<any>(null);
   const [overview, setOverview] = useState<any>(null);
@@ -41,6 +45,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [budget, setBudget] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editProjectOpen, setEditProjectOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!token) return;
@@ -112,6 +117,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           </div>
           <p className="text-muted-foreground">{project.clientName}</p>
         </div>
+        <button
+          onClick={() => setEditProjectOpen(true)}
+          className="btn btn-ghost flex items-center gap-2"
+        >
+          <Edit3 className="w-4 h-4" /> Edit Project
+        </button>
       </div>
 
       {/* Quick Stats Bar */}
@@ -122,7 +133,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         </div>
         <div className="card p-3">
           <p className="text-xs text-muted-foreground">Progress</p>
-          <p className="font-semibold">{project.completionPercentage}%</p>
+          <p className="font-semibold">{Number(project.completionPercentage ?? 0).toFixed(2)}%</p>
         </div>
         <div className="card p-3">
           <p className="text-xs text-muted-foreground">Priority</p>
@@ -179,6 +190,20 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       {activeTab === 'financial' && <FinancialTab project={project} budget={budget} />}
       {activeTab === 'reports' && <ReportsTab project={project} overview={overview} />}
       {activeTab === 'activity' && <ActivityTab projectId={id} />}
+      {/* Edit Project Modal */}
+      <EditProjectModal
+        isOpen={editProjectOpen}
+        onClose={() => setEditProjectOpen(false)}
+        onSave={(updated: any) => {
+          setProject((prev: any) => ({ ...prev, ...updated }));
+          loadData();
+          setEditProjectOpen(false);
+        }}
+        project={project}
+        users={users}
+        token={token || ''}
+        projectId={id}
+      />
     </div>
   );
 }

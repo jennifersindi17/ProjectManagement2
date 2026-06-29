@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsNumber, IsDateString } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsNumber, IsDateString, IsArray } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateProjectDto {
@@ -40,4 +40,37 @@ export class CreateProjectDto {
 
   @ApiPropertyOptional()
   @IsOptional() @IsString() projectManagerId?: string;
+
+  // Edit Project fields
+  @ApiPropertyOptional()
+  @IsOptional() @IsString() category?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional() @IsString() clientPic?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional() @IsString() projectSponsor?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional() @IsString() deliveryManager?: string;
+
+  @ApiPropertyOptional({ default: 'IDR' })
+  @IsOptional() @IsString() currency?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional() @IsDateString() targetGoLive?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional() @IsArray() tags?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional() @IsArray() labels?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional() @IsString() notes?: string;
+}
+
+export class UpdateProjectMembersDto {
+  @ApiProperty({ description: 'Array of user IDs to set as team members' })
+  @IsArray() @IsString({ each: true }) memberIds: string[];
 }

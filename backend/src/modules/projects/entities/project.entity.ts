@@ -41,6 +41,27 @@ export class Project {
 
   @Column({ name: 'project_manager_id', type: 'uuid', nullable: true }) projectManagerId: string;
 
+  @Column({ name: 'target_go_live', type: 'date', nullable: true }) targetGoLive: Date;
+
+  @Column({ name: 'client_pic', type: 'varchar', length: 255, nullable: true }) clientPic: string;
+
+  @Column({ name: 'project_sponsor', type: 'varchar', length: 255, nullable: true }) projectSponsor: string;
+
+  @Column({ name: 'delivery_manager', type: 'varchar', length: 255, nullable: true }) deliveryManager: string;
+
+  @Column({ name: 'currency', type: 'varchar', length: 3, default: 'IDR' }) currency: string;
+
+  @Column({ name: 'category', type: 'varchar', length: 100, nullable: true }) category: string;
+
+  @Column({ name: 'tags', type: 'jsonb', default: [] }) tags: string[];
+
+  @Column({ name: 'labels_jsonb', type: 'jsonb', default: [] }) labelsJsonb: string[];
+
+  // Virtual getter for labels (alias)
+  get labels(): string[] { return this.labelsJsonb || []; }
+
+  @Column({ name: 'notes', type: 'text', nullable: true }) notes: string;
+
   @Column({ name: 'created_by', type: 'uuid' }) createdBy: string;
 
   @Column({ name: 'cover_image_url', type: 'varchar', length: 500, nullable: true }) coverImageUrl: string;

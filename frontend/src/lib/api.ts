@@ -89,6 +89,9 @@ export const api = {
     create: (data: any, token: string) => apiFetch('/projects', { method: 'POST', body: data, token }),
     update: (id: string, data: any, token: string) => apiFetch(`/projects/${id}`, { method: 'PATCH', body: data, token }),
     delete: (id: string, token: string) => apiFetch(`/projects/${id}`, { method: 'DELETE', token }),
+    members: (id: string, token: string): Promise<any[]> => apiFetch(`/projects/${id}/members`, { token }),
+    updateMembers: (id: string, memberIds: string[], token: string) =>
+      apiFetch(`/projects/${id}/members`, { method: 'PUT', body: { memberIds }, token }),
   },
   tasks: {
     list: (params?: any, token?: string): Promise<{ data: Task[]; meta: { page: number; limit: number; total: number; totalPages: number } }> => apiFetch('/tasks', { token, params }),
@@ -116,6 +119,8 @@ export const api = {
       apiFetch(`/tasks/${taskId}/subtasks`, { token }),
     taskTree: (projectId: string, token: string): Promise<any[]> =>
       apiFetch(`/tasks/tree/${projectId}`, { token }),
+    recalculate: (projectId: string, token: string): Promise<{ progress: number }> =>
+      apiFetch(`/tasks/recalculate/${projectId}`, { method: 'POST', token }),
     bulkStatus: (taskIds: string[], status: string, token: string) =>
       apiFetch('/tasks/bulk/status', { method: 'PATCH', body: { taskIds, status }, token }),
     bulkDelete: (taskIds: string[], token: string) =>

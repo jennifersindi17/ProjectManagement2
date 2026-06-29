@@ -33,7 +33,6 @@ export class ProjectsService {
   }
 
   async getOverview(id: string) {
-    // Use project_dashboard view for stats
     const result = await this.repo.query('SELECT * FROM project_dashboard WHERE id = $1', [id]);
     if (!result || result.length === 0) throw new NotFoundException('Project not found');
     return result[0];
@@ -48,8 +47,54 @@ export class ProjectsService {
 
   async update(id: string, dto: any) {
     await this.findOne(id);
-    await this.repo.update(id, dto);
+
+    // Store label_jsonb if labels provided
+    if (dto.labels !== undefined) {
+      dto.labelsJsonb = dto.labels;
+      delete dto.labels;
+    }
+
+    // Pick only defined fields to send partial update
+    const cleanDto: any = {};
+    for (const key of Object.keys(dto)) {
+      if (dto[key] !== undefined) cleanDto[key] = dto[key];
+    }
+
+    await this.repo.update(id, cleanDto);
     return this.findOne(id);
+  }
+
+  async getMembers(projectId: string) {
+    const rows = await this.repo.query(
+      `SELECT pm.id, pm.project_id, pm.user_id, pm.role, pm.allocation_percentage, pm.hourly_rate, pm.joined_at,
+              u.first_name, u.last_name, u.email, u.avatar_url, u.role as user_role
+       FROM project_members pm
+       JOIN users u ON pm.user_id = u.id
+       WHERE pm.project_id = $1::uuid AND pm.left_at IS NULL
+       ORDER BY pm.role, u.first_name`,
+      [projectId],
+    );
+    return rows;
+  }
+
+  async updateMembers(projectId: string, memberIds: string[]) {
+    // Remove existing members not in new list
+    await this.repo.query(
+      `UPDATE project_members SET left_at = NOW() WHERE project_id = $1::uuid AND user_id != ALL($2::uuid[]) AND left_at IS NULL`,
+      [projectId, memberIds],
+    );
+
+    // Add new members
+    for (const userId of memberIds) {
+      await this.repo.query(
+        `INSERT INTO project_members (id, project_id, user_id, role, joined_at)
+         VALUES (uuid_generate_v4(), $1::uuid, $2::uuid, 'member', NOW())
+         ON CONFLICT (project_id, user_id) DO UPDATE SET left_at = NULL`,
+        [projectId, userId],
+      );
+    }
+
+    return this.getMembers(projectId);
   }
 
   async remove(id: string) {
