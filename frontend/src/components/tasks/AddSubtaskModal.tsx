@@ -116,7 +116,7 @@ export default function AddSubtaskModal({
         dueDate: dueDate || undefined,
       };
 
-      const newTask = await api.tasks.create(data, token);
+      const newTask: any = await api.tasks.create(data, token);
       setSuccessMessage(`Subtask "${newTask.title}" created successfully`);
       setTimeout(() => {
         if (onSuccess) onSuccess(newTask);

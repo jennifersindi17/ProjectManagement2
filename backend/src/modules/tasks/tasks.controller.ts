@@ -53,6 +53,17 @@ export class TasksController {
     );
   }
 
+  @Post('recalculate/:projectId') @ApiOperation({ summary: 'Recalculate full project progress' })
+  async recalculateProject(@Param('projectId') projectId: string) {
+    const tasks = await this.service.findAll(1, 1000, projectId);
+    const taskIds = (tasks as any).data.map((t: any) => t.id);
+    for (const id of taskIds) {
+      await this.service.calculateTaskProgress(id);
+    }
+    const progress = await this.service.calculateProjectProgress(projectId);
+    return { projectId, progress, taskCount: taskIds.length };
+  }
+
   @Get(':id') @ApiOperation({ summary: 'Get task by ID' })
   findOne(@Param('id') id: string) { return this.service.findOne(id); }
 

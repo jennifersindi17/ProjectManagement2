@@ -134,9 +134,14 @@ export class TasksService {
       [saved.id, userId, saved.title],
     );
 
-    // Recalculate parent progress if this is a subtask
+    // Recalculate parent + project progress if this is a subtask
     if (dto.parentTaskId) {
-      await this.recalculateParentProgress(dto.parentTaskId);
+      await this.recalculateProgress(saved.id);
+    } else {
+      // Top-level task: just update project progress
+      if (dto.projectId) {
+        await this.calculateProjectProgress(dto.projectId);
+      }
     }
 
     return saved;
@@ -184,21 +189,12 @@ export class TasksService {
       }
     }
 
-    // Recalculate parent progress if this was a subtask that changed
-    // (status, completionPercentage, estimatedHours can affect parent)
-
-    const existingParentId = existing.parentTaskId;
+    // Recalculate parent + project progress if relevant fields changed
     const fieldsAffectingProgress = ['status', 'completionPercentage', 'estimatedHours'];
     const changedProgressField = fieldsAffectingProgress.some(f => (dto as any)[f] !== undefined);
 
     if (changedProgressField) {
-      if (existingParentId) {
-        await this.recalculateParentProgress(existingParentId);
-      }
-      // Also handle case where parentTaskId itself changed
-      if (dto.parentTaskId && dto.parentTaskId !== existingParentId) {
-        await this.recalculateParentProgress(dto.parentTaskId);
-      }
+      await this.recalculateProgress(id);
     }
 
     return this.findOne(id);
@@ -226,7 +222,13 @@ export class TasksService {
   }
 
   async remove(id: string) {
+    // Get project ID before soft-delete
+    const rows = await this.repo.query(`SELECT project_id FROM tasks WHERE id = $1`, [id]);
     await this.repo.update(id, { deletedAt: new Date() });
+    // Recalculate project progress
+    if (rows.length > 0) {
+      await this.calculateProjectProgress(rows[0].project_id);
+    }
     return { message: 'Task deleted' };
   }
 
@@ -426,11 +428,15 @@ export class TasksService {
   // === Bulk Actions ===
   async bulkUpdateStatus(taskIds: string[], status: string) {
     if (taskIds.length === 0) return { updated: 0 };
-    const setClause = status === 'done' ? 'status = $1, completed_at = NOW()' : 'status = $1';
+    const setClause = status === 'done' ? 'status = $1::task_status, completed_at = NOW()' : 'status = $1::task_status';
     await this.repo.query(
-      `UPDATE tasks SET ${setClause} WHERE id = ANY($2)`,
+      `UPDATE tasks SET ${setClause}, updated_at = NOW() WHERE id = ANY($2::uuid[])`,
       [status, taskIds],
     );
+    // Recalculate progress for affected tasks
+    for (const id of taskIds) {
+      await this.recalculateProgress(id);
+    }
     return { updated: taskIds.length };
   }
 
@@ -445,10 +451,19 @@ export class TasksService {
 
   async bulkDelete(taskIds: string[]) {
     if (taskIds.length === 0) return { deleted: 0 };
+    // Get project IDs before deleting
+    const rows = await this.repo.query(
+      `SELECT DISTINCT project_id FROM tasks WHERE id = ANY($1)`,
+      [taskIds],
+    );
     await this.repo.query(
       `UPDATE tasks SET deleted_at = NOW() WHERE id = ANY($1)`,
       [taskIds],
     );
+    // Recalculate project progress
+    for (const row of rows) {
+      await this.calculateProjectProgress(row.project_id);
+    }
     return { deleted: taskIds.length };
   }
 
@@ -599,38 +614,50 @@ export class TasksService {
       [saved.id, userId, original.id, saved.title],
     );
 
+    // Recalculate project progress (new task added)
+    if (saved.projectId) {
+      await this.calculateProjectProgress(saved.projectId);
+    }
+
     return saved;
   }
 
-  // === Hierarchy: Recalculate Parent Progress ===
-  private async recalculateParentProgress(parentTaskId: string) {
-    // Get all active subtasks of this parent
+  // === Progress Calculation Engine ===
+
+  /**
+   * Calculate a single task's progress from its subtasks.
+   * If the task has no subtasks, returns its own completion Updates the task in DB and recurses upward to parent.
+   */
+  async calculateTaskProgress(taskId: string): Promise<number> {
+    const taskRows = await this.repo.query(
+      `SELECT id, parent_task_id, completion_percentage FROM tasks WHERE id = $1 AND deleted_at IS NULL`,
+      [taskId],
+    );
+    if (taskRows.length === 0) return 0;
+    const task = taskRows[0];
+
+    // Get direct children
     const subtasks = await this.repo.query(
       `SELECT completion_percentage, estimated_hours, status
        FROM tasks WHERE parent_task_id = $1 AND deleted_at IS NULL`,
-      [parentTaskId],
+      [taskId],
     );
 
-    if (subtasks.length === 0) return;
+    let newProgress: number;
 
-    // Weighted average by estimatedHours (fallback to equal weight if no estimates)
-    let totalWeight = 0;
-    let weightedProgress = 0;
-    for (const sub of subtasks) {
-      const est = parseFloat(sub.estimated_hours) || 0;
-      const weight = est > 0 ? est : 1; // equal weight if no estimate
-      totalWeight += weight;
-      weightedProgress += (parseFloat(sub.completion_percentage) || 0) * weight;
+    if (subtasks.length === 0) {
+      // Leaf task: use its own progress
+      newProgress = parseFloat(task.completion_percentage) || 0;
+    } else {
+      // Parent task: average of subtask progress (equal weight per spec)
+      const sum = subtasks.reduce((acc: number, s: any) => acc + (parseFloat(s.completion_percentage) || 0), 0);
+      newProgress = Math.round((sum / subtasks.length) * 100) / 100;
     }
 
-    const newProgress = totalWeight > 0
-      ? Math.round((weightedProgress / totalWeight) * 100) / 100
-      : 0;
-
-    // Determine aggregated status
+    // Determine aggregated status from subtasks
     const statuses = subtasks.map((s: any) => s.status);
     let aggStatus = 'todo';
-    if (statuses.every((s: string) => s === 'done' || s === 'cancelled')) {
+    if (statuses.length > 0 && statuses.every((s: string) => s === 'done' || s === 'cancelled')) {
       aggStatus = 'done';
     } else if (statuses.some((s: string) => s === 'in_progress' || s === 'review' || s === 'testing')) {
       aggStatus = 'in_progress';
@@ -638,13 +665,67 @@ export class TasksService {
       aggStatus = 'blocked';
     }
 
+    // Update this task
     await this.repo.query(
-      `UPDATE tasks SET completion_percentage = $1, status = $2::task_status,
-       completed_at = CASE WHEN $2::text = 'done' THEN NOW() ELSE NULL END,
+      `UPDATE tasks SET completion_percentage = $1, status = COALESCE($2::task_status, status),
+       completed_at = CASE WHEN $2::text = 'done' THEN NOW() WHEN $2::text != 'done' THEN NULL ELSE completed_at END,
        updated_at = NOW()
        WHERE id = $3::uuid`,
-      [newProgress, aggStatus, parentTaskId],
+      [newProgress, subtasks.length > 0 ? aggStatus : null, taskId],
     );
+
+    // Recurse upward
+    if (task.parent_task_id) {
+      await this.calculateTaskProgress(task.parent_task_id);
+    }
+
+    return newProgress;
+  }
+
+  /**
+   * Calculate project progress from all top-level tasks.
+   * Updates project.completion_percentage in DB.
+   */
+  async calculateProjectProgress(projectId: string): Promise<number> {
+    // Get all top-level tasks (no parent) for this project
+    const topLevelTasks = await this.repo.query(
+      `SELECT completion_percentage FROM tasks WHERE project_id = $1 AND parent_task_id IS NULL AND deleted_at IS NULL`,
+      [projectId],
+    );
+
+    let projectProgress = 0;
+    if (topLevelTasks.length > 0) {
+      const sum = topLevelTasks.reduce((acc: number, t: any) => acc + (parseFloat(t.completion_percentage) || 0), 0);
+      projectProgress = Math.round((sum / topLevelTasks.length) * 100) / 100;
+    }
+
+    // Cache in project table
+    await this.repo.query(
+      `UPDATE projects SET completion_percentage = $1, updated_at = NOW() WHERE id = $2::uuid`,
+      [projectProgress, projectId],
+    );
+
+    return projectProgress;
+  }
+
+  /**
+   * Full recalculation: task → parent chain → project.
+   * Call this after any task/subtask mutation.
+   */
+  async recalculateProgress(taskId: string) {
+    // First recalculate the task itself (and recurse up)
+    await this.calculateTaskProgress(taskId);
+
+    // Get the project for this task
+    const rows = await this.repo.query(
+      `SELECT project_id FROM tasks WHERE id = $1`,
+      [taskId],
+    );
+    if (rows.length === 0) return;
+    const projectId = rows[0].project_id;
+
+    // Recalculate project progress
+    await this.calculateProjectProgress(projectId);
   }
 
   // === Hierarchy: Get Subtasks ===

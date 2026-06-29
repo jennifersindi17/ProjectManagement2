@@ -38,6 +38,7 @@ export interface TaskDetailDrawerProps {
   onDuplicate?: (task: any) => void;
   onAddSubtask?: (task: any) => void;
   onOpenTaskCenter: (taskId: string) => void;
+  onTaskUpdated?: () => void;
   taskId: string;
   token: string;
   users?: any[];
@@ -284,6 +285,7 @@ export default function TaskDetailDrawer({
   onDuplicate,
   onAddSubtask,
   onOpenTaskCenter,
+  onTaskUpdated,
   taskId,
   token,
   users: usersProp,
@@ -423,6 +425,15 @@ export default function TaskDetailDrawer({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
+
+  // Auto-refresh task data every 3 seconds while drawer is open (to catch subtask changes)
+  useEffect(() => {
+    if (!isOpen) return;
+    const interval = setInterval(() => {
+      fetchTaskData();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [isOpen, fetchTaskData]);
 
   // Copy task ID
   const handleCopyId = async () => {
@@ -1051,6 +1062,7 @@ export default function TaskDetailDrawer({
           onSuccess={() => {
             setShowAddSubtask(false);
             fetchTaskData();
+            onTaskUpdated?.();
           }}
           parentTask={{
             id: task.id,
