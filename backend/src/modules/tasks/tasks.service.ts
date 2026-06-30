@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Task } from './entities/task.entity';
@@ -100,18 +100,53 @@ export class TasksService {
   }
 
   async create(dto: CreateTaskDto, userId: string) {
-    const count = await this.repo.count({ where: { projectId: dto.projectId } });
-    const project = await this.repo.query('SELECT code FROM projects WHERE id = $1', [dto.projectId]);
-    const code = project.length > 0
-      ? `${project[0].code}-${String(count + 1).padStart(4, '0')}`
-      : `TSK-${String(count + 1).padStart(4, '0')}`;
+    // Validate parent task exists if provided
+    let taskLevel = 1;
+    if (dto.parentTaskId) {
+      const parentCheck = await this.repo.query(
+        'SELECT id, project_id, level FROM tasks WHERE id = $1 AND deleted_at IS NULL',
+        [dto.parentTaskId]
+      );
+      if (parentCheck.length === 0) {
+        throw new NotFoundException('Parent Task not found');
+      }
+      if (parentCheck[0].project_id !== dto.projectId) {
+        throw new BadRequestException('Parent Task belongs to a different project');
+      }
+      if (parentCheck[0].level >= 3) {
+        throw new BadRequestException('Maximum hierarchy level exceeded (max 3)');
+      }
+      taskLevel = parentCheck[0].level + 1;
+    }
+
+    // Validate project exists
+    const projectCheck = await this.repo.query('SELECT code FROM projects WHERE id = $1 AND deleted_at IS NULL', [dto.projectId]);
+    if (projectCheck.length === 0) {
+      throw new NotFoundException('Project not found');
+    }
+    const projectCode = projectCheck[0].code;
+
+    // Generate task code using MAX existing code (prevents duplicate / race condition)
+    const maxResult = await this.repo.query(
+      `SELECT MAX(task_code) as max_code FROM tasks WHERE project_id = $1 AND task_code LIKE $2`,
+      [dto.projectId, `${projectCode}-%`]
+    );
+    let nextNum = 1;
+    if (maxResult[0]?.max_code) {
+      const parts = maxResult[0].max_code.split('-');
+      const lastNum = parseInt(parts[parts.length - 1], 10);
+      if (!isNaN(lastNum)) nextNum = lastNum + 1;
+    }
+    const code = `${projectCode}-${String(nextNum).padStart(4, '0')}`;
 
     // Use raw INSERT to avoid pg type inference issues with nullable UUID columns
     const result = await this.repo.query(
-      `INSERT INTO tasks (project_id, parent_task_id, task_code, title, description, status, priority, task_type, reporter_id, depends_on)
-       VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::task_status, $7::task_priority, $8::task_type, $9::uuid, $10::text[])
+      `INSERT INTO tasks (project_id, parent_task_id, task_code, title, description, status, priority, task_type,
+                           reporter_id, completion_percentage, story_points, estimated_hours, level, depends_on)
+       VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::task_status, $7::task_priority, $8::task_type,
+               $9::uuid, $10, $11, $12, $13, $14::text[])
        RETURNING id, task_code, title, description, status, priority, task_type, project_id, parent_task_id, reporter_id, assignee_id,
-                 story_points, estimated_hours, actual_hours, due_date, start_date, completion_percentage, position, depends_on, created_at, updated_at`,
+                 story_points, estimated_hours, actual_hours, due_date, start_date, completion_percentage, level, position, depends_on, created_at, updated_at`,
       [
         dto.projectId,
         dto.parentTaskId || null,
@@ -120,8 +155,12 @@ export class TasksService {
         dto.description || null,
         dto.status || 'backlog',
         dto.priority || 'medium',
-        dto.taskType || 'task',
+        dto.taskType || 'subtask',
         userId,
+        dto.completionPercentage ?? 0,
+        dto.storyPoints ?? null,
+        dto.estimatedHours ?? null,
+        taskLevel,
         dto.dependsOn || null,
       ],
     );

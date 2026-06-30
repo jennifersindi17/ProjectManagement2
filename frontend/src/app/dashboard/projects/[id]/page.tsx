@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useAuth } from '@/store/auth';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, Plus, Calendar, Users, AlertTriangle, FileText, DollarSign, Activity, Clock, Target, TrendingUp, BarChart3, MoreVertical, Edit3, Copy, Trash2, Eye, GitBranch, User as UserIcon } from 'lucide-react';
+import { ArrowLeft, Plus, Calendar, Users, AlertTriangle, FileText, DollarSign, Activity, Clock, Target, TrendingUp, BarChart3, MoreVertical, Edit3, Copy, Trash2, Eye, GitBranch, User as UserIcon, ChevronRight, ChevronDown } from 'lucide-react';
 import TaskModal from '@/components/tasks/TaskModal';
 import TaskDetailDrawer from '@/components/tasks/TaskDetailDrawer';
 import DuplicateTaskModal from '@/components/tasks/DuplicateTaskModal';
@@ -390,6 +390,25 @@ function TasksTab({ tasks, projectId, token, onTaskCreated, users, project }: an
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [duplicateTask, setDuplicateTask] = useState<any>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const parentIds = new Set<string>();
+    for (const t of tasks) {
+      if (!t.parentTaskId && tasks.some((c: any) => c.parentTaskId === t.id)) {
+        parentIds.add(t.id);
+      }
+    }
+    setExpandedIds(parentIds);
+  }, [tasks]);
+
+  const toggleExpand = useCallback((id: string) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
 
   const refresh = useCallback(async () => {
     if (onTaskCreated) await onTaskCreated();
@@ -501,55 +520,80 @@ function TasksTab({ tasks, projectId, token, onTaskCreated, users, project }: an
     return `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || null;
   };
 
+  const sortedTasks = useMemo(() => {
+    return [...tasks].sort((a: any, b: any) => {
+      const aParent = a.parentTaskId || '';
+      const bParent = b.parentTaskId || '';
+      if (!aParent && !bParent) return (a.position || 0) - (b.position || 0);
+      if (!aParent && bParent) {
+        if (b.parentTaskId === a.id) return -1;
+        return (a.position || 0) - (tasks.find((t: any) => t.id === b.parentTaskId)?.position || 0);
+      }
+      if (aParent && !bParent) {
+        if (a.parentTaskId === b.id) return 1;
+        return (tasks.find((t: any) => t.id === aParent)?.position || 0) - (b.position || 0);
+      }
+      const aRoot = tasks.find((t: any) => t.id === aParent);
+      const bRoot = tasks.find((t: any) => t.id === bParent);
+      if (aRoot && bRoot && aRoot.id !== bRoot.id) return (aRoot.position || 0) - (bRoot.position || 0);
+      return (a.position || 0) - (b.position || 0);
+    });
+  }, [tasks]);
+
+  const parentChildCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const t of tasks) {
+      if (t.parentTaskId) counts[t.parentTaskId] = (counts[t.parentTaskId] || 0) + 1;
+    }
+    return counts;
+  }, [tasks]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="font-semibold">Tasks ({tasks.length})</h3>
-        <button className="btn btn-primary btn-sm" onClick={() => setTaskModal({ mode: 'add', task: { projectId } })}>
+        <button className="btn btn-primary btn-sm" onClick={() => setTaskModal({ mode: 'add' })}>
           <Plus className="w-4 h-4 mr-1" /> Add Task
         </button>
       </div>
 
       <div className="space-y-2">
-        {(() => {
-          // Sort: parents first, interleaved with subtasks
-          const sorted = [...tasks].sort((a, b) => {
-            const aParent = a.parentTaskId || '';
-            const bParent = b.parentTaskId || '';
-            // Root tasks by position, subtasks grouped under parent
-            if (!aParent && !bParent) return (a.position || 0) - (b.position || 0);
-            if (!aParent && bParent) {
-              // a is root, b is subtask — if b's parent is a, b goes after a
-              if (b.parentTaskId === a.id) return -1;
-              return (a.position || 0) - (tasks.find((t: any) => t.id === b.parentTaskId)?.position || 0);
+        {sortedTasks.map((task: any) => {
+            const depth = (task.level || 1) - 1;
+            const hasChildren = (parentChildCounts[task.id] || 0) > 0;
+            const indentWidth = depth * 28;
+            let visible = true;
+            if (task.parentTaskId) {
+              const parent = tasks.find((t: any) => t.id === task.parentTaskId);
+              if (parent && !expandedIds.has(parent.id)) visible = false;
+              if (parent && parent.parentTaskId) {
+                if (!expandedIds.has(parent.parentTaskId)) visible = false;
+              }
             }
-            if (aParent && !bParent) {
-              if (a.parentTaskId === b.id) return 1;
-              return (tasks.find((t: any) => t.id === aParent)?.position || 0) - (b.position || 0);
-            }
-            // Both subtasks — sort by parent position, then own position
-            const aRoot = tasks.find((t: any) => t.id === aParent);
-            const bRoot = tasks.find((t: any) => t.id === bParent);
-            if (aRoot && bRoot && aRoot.id !== bRoot.id) return (aRoot.position || 0) - (bRoot.position || 0);
-            return (a.position || 0) - (b.position || 0);
-          });
-          return sorted.map((task: any) => (
+            if (!visible) return null;
+            return (
           <div
             key={task.id}
-            className={`card p-3 flex items-center gap-3 relative cursor-pointer hover:bg-muted/50 transition-colors ${task.parentTaskId ? 'ml-8 bg-secondary/30 border-l-2 border-l-purple-500/40' : ''}`}
+            className={`card p-3 flex items-center gap-3 relative cursor-pointer hover:bg-muted/50 transition-colors ${depth > 0 ? 'bg-secondary/20 border-l-2 border-l-purple-500/40' : ''}`}
+            style={{ marginLeft: `${indentWidth}px` }}
             onDoubleClick={() => openEditModal(task)}
           >
-            {task.parentTaskId && (
-              <div className="absolute left-[-2px] top-1/2 -translate-y-1/2 w-2 h-[1px] bg-purple-500/40" />
-            )}
-            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${task.parentTaskId ? 'bg-purple-500/60' : statusColors[task.status] || 'bg-gray-500'}`} />
+            <button
+              className={`flex-shrink-0 w-5 h-5 flex items-center justify-center rounded hover:bg-muted transition-colors ${!hasChildren ? 'invisible pointer-events-none' : ''}`}
+              onClick={(e) => { e.stopPropagation(); toggleExpand(task.id); }}
+            >
+              {hasChildren && (expandedIds.has(task.id)
+                ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />)}
+            </button>
+            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${depth > 0 ? 'bg-purple-500/60' : statusColors[task.status] || 'bg-gray-500'}`} />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <p className="font-medium text-sm truncate">{task.title}</p>
-                {tasks.filter((t: any) => t.parentTaskId === task.id).length > 0 && (
-                  <span className="text-[10px] bg-purple-500/10 text-purple-500 px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shrink-0">
+                {hasChildren && (
+                  <span className="text-[10px] bg-purple-500/10 text-purple-400 px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shrink-0 font-medium">
                     <GitBranch className="w-2.5 h-2.5" />
-                    {tasks.filter((t: any) => t.parentTaskId === task.id).length}
+                    {parentChildCounts[task.id]}
                   </span>
                 )}
               </div>
@@ -680,7 +724,8 @@ function TasksTab({ tasks, projectId, token, onTaskCreated, users, project }: an
               </div>
             )}
           </div>
-        ))})()}
+            );
+          })}
         {tasks.length === 0 && <p className="text-center text-muted-foreground py-8">No tasks yet</p>}
       </div>
 

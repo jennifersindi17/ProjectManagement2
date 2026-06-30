@@ -93,7 +93,7 @@ export default function EditProjectModal({
       api.projects.members(projectId, token).then((res: any) => {
         const members = Array.isArray(res) ? res : (res.data || []);
         setProjectMembers(members);
-        setSelectedMembers(members.map((m: any) => m.userId || m.user_id || m.user_id));
+        setSelectedMembers(members.map((m: any) => m.userId || m.user_id));
       }).catch(() => {
         setProjectMembers([]);
         setSelectedMembers([]);
@@ -118,7 +118,7 @@ export default function EditProjectModal({
 
   const hasChanges = () => {
     const fieldsChanged = Object.keys(formData).some((key) => isFieldChanged(key));
-    const oldIds = projectMembers.map((m) => m.userId || m.user_id).sort();
+    const oldIds = projectMembers.map((m) => m.userId).sort();
     const newIds = [...selectedMembers].sort();
     return fieldsChanged || JSON.stringify(oldIds) !== JSON.stringify(newIds);
   };
@@ -192,7 +192,7 @@ export default function EditProjectModal({
         }
       }
       const updated = await api.projects.update(projectId, changedFields, token);
-      const oldIds = projectMembers.map((m) => m.userId || m.user_id).sort();
+      const oldIds = projectMembers.map((m) => m.userId).sort();
       const newIds = [...selectedMembers].sort();
       if (JSON.stringify(oldIds) !== JSON.stringify(newIds)) {
         await api.projects.updateMembers(projectId, selectedMembers, token);
@@ -370,7 +370,7 @@ export default function EditProjectModal({
                             <p className="text-sm font-medium truncate">{user.firstName} {user.lastName}</p>
                             {user.email && <p className="text-xs text-muted-foreground truncate">{user.email}</p>}
                           </div>
-                          {projectMembers.find((m) => (m.userId || m.user_id) === user.id) && (
+                          {projectMembers.find((m) => (m.userId) === user.id) && (
                             <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">Existing</span>
                           )}
                         </button>

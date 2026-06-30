@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Save, X, Plus, Trash2, AlertCircle } from 'lucide-react';
+import { Save, X, Plus, Trash2, AlertCircle, Lock, CheckCircle2 } from 'lucide-react';
 import { api } from '@/lib/api';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -102,6 +102,203 @@ const TASK_TYPE_OPTIONS = [
   { value: 'subtask', label: 'Subtask' },
 ];
 
+// ─── Progress Slider Component ───────────────────────────────────────────────
+
+function getProgressColor(pct: number): { bar: string; text: string; bg: string } {
+  if (pct === 0) return { bar: 'bg-gray-400', text: 'text-gray-400', bg: 'bg-gray-400/10' };
+  if (pct <= 25) return { bar: 'bg-red-500', text: 'text-red-500', bg: 'bg-red-500/10' };
+  if (pct <= 50) return { bar: 'bg-orange-500', text: 'text-orange-500', bg: 'bg-orange-500/10' };
+  if (pct <= 75) return { bar: 'bg-blue-500', text: 'text-blue-500', bg: 'bg-blue-500/10' };
+  if (pct < 100) return { bar: 'bg-green-500', text: 'text-green-500', bg: 'bg-green-500/10' };
+  return { bar: 'bg-emerald-600', text: 'text-emerald-600', bg: 'bg-emerald-600/10' };
+}
+
+function ProgressSlider({
+  value,
+  onChange,
+  disabled = false,
+  isParentTask = false,
+  childProgress,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  disabled?: boolean;
+  isParentTask?: boolean;
+  childProgress?: number;
+}) {
+  const [dragging, setDragging] = useState(false);
+  const [tooltipPos, setTooltipPos] = useState(0);
+  const barRef = useRef<HTMLDivElement>(null);
+  const colors = getProgressColor(isParentTask ? (childProgress ?? value) : value);
+  const displayValue = isParentTask ? (childProgress ?? value) : value;
+
+  const handleBarInteraction = (clientX: number) => {
+    if (!barRef.current || disabled) return;
+    const rect = barRef.current.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(100, Math.round(((clientX - rect.left) / rect.width) * 100)));
+    onChange(pct);
+    setTooltipPos(Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100)));
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (disabled) return;
+    setDragging(true);
+    handleBarInteraction(e.clientX);
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      handleBarInteraction(ev.clientX);
+    };
+    const handleMouseUp = () => {
+      setDragging(false);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (disabled) return;
+    setDragging(true);
+    handleBarInteraction(e.touches[0].clientX);
+
+    const handleTouchMove = (ev: TouchEvent) => {
+      handleBarInteraction(ev.touches[0].clientX);
+    };
+    const handleTouchEnd = () => {
+      setDragging(false);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+    window.addEventListener('touchmove', handleTouchMove);
+    window.addEventListener('touchend', handleTouchEnd);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (disabled) return;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      onChange(Math.min(100, value + 5));
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      onChange(Math.max(0, value - 5));
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      onChange(0);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      onChange(100);
+    }
+  };
+
+  const quickButtons = [0, 25, 50, 75, 100];
+
+  return (
+    <div className={`col-span-2 ${disabled ? 'opacity-60' : ''}`}>
+      <div className="flex items-center justify-between mb-2">
+        <label className="label mb-0 flex items-center gap-2">
+          Progress
+          {isParentTask && (
+            <Lock className="w-3.5 h-3.5 text-muted-foreground" />
+          )}
+        </label>
+        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md ${colors.bg}`}>
+          {displayValue === 100 && (
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+          )}
+          <span className={`text-lg font-bold tabular-nums ${colors.text}`}>
+            {displayValue}%
+          </span>
+        </div>
+      </div>
+
+      {/* Progress bar + slider */}
+      <div className="relative pt-2 pb-1">
+        {/* Track */}
+        <div
+          ref={barRef}
+          className={`relative h-3 bg-muted/60 rounded-full overflow-hidden cursor-pointer ${isParentTask ? 'cursor-not-allowed' : ''}`}
+          onMouseDown={!isParentTask ? handleMouseDown : undefined}
+          onTouchStart={!isParentTask ? handleTouchStart : undefined}
+          role="slider"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={displayValue}
+          aria-label="Task progress"
+          tabIndex={isParentTask ? -1 : 0}
+          onKeyDown={!isParentTask ? handleKeyDown : undefined}
+        >
+          {/* Filled track */}
+          <div
+            className={`absolute inset-y-0 left-0 rounded-full transition-all duration-200 ease-out ${colors.bar}`}
+            style={{ width: `${displayValue}%` }}
+          />
+
+          {/* Thumb */}
+          {!isParentTask && (
+            <div
+              className={`absolute top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-white border-2 shadow-md transition-all duration-150 ${
+                dragging ? 'scale-110 shadow-lg' : 'hover:scale-105'
+              }`}
+              style={{
+                left: `calc(${value}% - 10px)`,
+                borderColor: value === 0 ? '#9ca3af' : value <= 25 ? '#ef4444' : value <= 50 ? '#f97316' : value <= 75 ? '#3b82f6' : value < 100 ? '#22c55e' : '#059669',
+              }}
+            />
+          )}
+
+          {/* Tooltip while dragging */}
+          {dragging && !isParentTask && (
+            <div
+              className="absolute -top-8 transform -translate-x-1/2 bg-foreground text-background text-xs font-bold px-2 py-1 rounded-md pointer-events-none whitespace-nowrap z-10"
+              style={{ left: `${Math.max(8, Math.min(92, tooltipPos))}%` }}
+            >
+              {value}%
+            </div>
+          )}
+        </div>
+
+        {/* Scale markers */}
+        <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5 px-0.5">
+          {[0, 25, 50, 75, 100].map(mark => (
+            <span key={mark} className={`${mark === displayValue ? 'font-bold text-foreground' : ''}`}>
+              {mark}%
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Quick buttons */}
+      {!isParentTask && (
+        <div className="flex gap-1.5 mt-2">
+          {quickButtons.map(val => (
+            <button
+              key={val}
+              type="button"
+              onClick={() => onChange(val)}
+              className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-all duration-150 ${
+                value === val
+                  ? `${colors.bar} text-white shadow-sm`
+                  : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              {val}%
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Parent task info */}
+      {isParentTask && (
+        <div className="mt-2 p-2 bg-muted/30 rounded-lg flex items-center gap-2 text-xs text-muted-foreground">
+          <Lock className="w-3.5 h-3.5" />
+          <span>Auto-calculated from child tasks. Cannot edit manually.</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function TaskModal({
@@ -143,6 +340,8 @@ export default function TaskModal({
   const [hasChanges, setHasChanges] = useState(false);
   const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
+  const [subtasksCount, setSubtasksCount] = useState(0);
+  const [childProgressValue, setChildProgressValue] = useState<number | undefined>(undefined);
 
   // ─── Populate form for edit mode ─────────────────────────────────────────
 
@@ -176,6 +375,17 @@ export default function TaskModal({
           }
         }).catch(() => {});
       }
+
+      // Fetch subtasks to detect parent task and get child progress
+      api.tasks.subtasks(task.id, token).then((subs: any[]) => {
+        if (subs && Array.isArray(subs)) {
+          setSubtasksCount(subs.length);
+          if (subs.length > 0) {
+            const avg = Math.round(subs.reduce((sum: number, s: any) => sum + (s.completionPercentage || 0), 0) / subs.length);
+            setChildProgressValue(avg);
+          }
+        }
+      }).catch(() => {});
     }
   }, [task, isEditMode, token]);
 
@@ -197,6 +407,8 @@ export default function TaskModal({
     setTaskType('task');
     setTagsInput('');
     setChecklist([]);
+    setSubtasksCount(0);
+    setChildProgressValue(undefined);
     setErrors({});
     setHasChanges(false);
     setShowUnsavedConfirm(false);
@@ -574,7 +786,14 @@ export default function TaskModal({
                   <label className="label">Status</label>
                   <select
                     value={status}
-                    onChange={e => setStatus(e.target.value)}
+                    onChange={e => {
+                      const newStatus = e.target.value;
+                      setStatus(newStatus);
+                      if (subtasksCount === 0) {
+                        if (newStatus === 'done') setCompletionPercentage(100);
+                        else if (newStatus === 'backlog' || newStatus === 'todo') setCompletionPercentage(0);
+                      }
+                    }}
                     className="input"
                     disabled={isViewMode}
                   >
@@ -596,25 +815,13 @@ export default function TaskModal({
                     ))}
                   </select>
                 </div>
-                <div className="col-span-2">
-                  <label className="label">
-                    Progress: {completionPercentage}%
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={completionPercentage}
-                    onChange={e => setCompletionPercentage(Number(e.target.value))}
-                    className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
-                    disabled={isViewMode}
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                    <span>0%</span>
-                    <span>50%</span>
-                    <span>100%</span>
-                  </div>
-                </div>
+                <ProgressSlider
+                  value={completionPercentage}
+                  onChange={setCompletionPercentage}
+                  disabled={isViewMode}
+                  isParentTask={subtasksCount > 0}
+                  childProgress={childProgressValue}
+                />
               </>
             ))}
 

@@ -21,6 +21,7 @@ export class Task {
   @Column({ type: 'date', nullable: true }) startDate: Date;
   @Column({ type: 'timestamptz', nullable: true }) completedAt: Date;
   @Column({ type: 'decimal', precision: 5, scale: 2, default: 0 }) completionPercentage: number;
+  @Column({ type: 'int', default: 1 }) level: number;
   @Column({ type: 'int', default: 0 }) position: number;
   @Column({ type: 'text', array: true, default: {} }) labels: string[];
   @Column({ type: 'jsonb', default: {} }) metadata: any;

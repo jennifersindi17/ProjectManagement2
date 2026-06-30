@@ -141,7 +141,7 @@ export default function DuplicateTaskModal({
       const newTask = await api.tasks.duplicate(task.id, overrides, token);
 
       // Show success message briefly before closing
-      setSuccessMessage(`Task duplicated successfully as "${newTask.title}"`);
+      setSuccessMessage(`Task duplicated successfully as "${(newTask as any).title}"`)
 
       // Auto-close after 1.5s and trigger parent refresh
       setTimeout(() => {

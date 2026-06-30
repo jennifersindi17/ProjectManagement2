@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsNumber, IsDateString, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsNumber, IsDateString, IsUUID, Min, Max } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateTaskDto {
@@ -16,6 +16,7 @@ export class CreateTaskDto {
   @ApiPropertyOptional() @IsOptional() @IsUUID() assigneeId?: string;
   @ApiPropertyOptional() @IsOptional() @IsNumber() storyPoints?: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber() estimatedHours?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) @Max(100) completionPercentage?: number;
   @ApiPropertyOptional() @IsOptional() @IsDateString() dueDate?: string;
   @ApiPropertyOptional() @IsOptional() @IsString({ each: true }) dependsOn?: string[];
 }
