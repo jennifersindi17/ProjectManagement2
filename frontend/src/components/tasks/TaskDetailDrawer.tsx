@@ -26,6 +26,8 @@ import {
   FileSpreadsheet,
   FileText as PdfIcon,
   GitBranch,
+  ChevronRight,
+  ChevronDown,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import AddSubtaskModal from '@/components/tasks/AddSubtaskModal';
@@ -277,6 +279,151 @@ function ProgressBar({ percentage }: { percentage: number }) {
   );
 }
 
+// ─── Descendant Tree (recursive) ───────────────────────────────────────────
+
+interface DescendantTreeProps {
+  descendants: any[];
+  users: any[];
+  expandedIds: Set<string>;
+  onToggle: (id: string) => void;
+  onAddSubtask: (parentTask: any) => void;
+}
+
+function DescendantTree({ descendants, users, expandedIds, onToggle, onAddSubtask }: DescendantTreeProps) {
+  // Build children map from flat descendant list
+  const childrenMap = new Map<string, any[]>();
+  const allIds = new Set<string>();
+
+  for (const d of descendants) {
+    allIds.add(d.id);
+    const parentId = d.parent_task_id;
+    if (!childrenMap.has(parentId)) childrenMap.set(parentId, []);
+    childrenMap.get(parentId)!.push(d);
+  }
+
+  // Sort children by position then created_at
+  for (const [, children] of childrenMap) {
+    children.sort((a, b) => (a.position || 0) - (b.position || 0) || (a.created_at || '').localeCompare(b.created_at || ''));
+  }
+
+  // Level colors matching TaskTree
+  const LEVEL_COLORS: Record<number, string> = {
+    0: 'text-purple-400',
+    1: 'text-blue-400',
+    2: 'text-green-400',
+    3: 'text-orange-400',
+    4: 'text-gray-400',
+  };
+
+  // Recursive render
+  const renderNode = (node: any, depth: number) => {
+    const children = childrenMap.get(node.id) || [];
+    const hasChildren = children.length > 0;
+    const isExpanded = expandedIds.has(node.id);
+    const indentPx = depth * 20;
+    const colorClass = LEVEL_COLORS[depth] || LEVEL_COLORS[4];
+
+    const assigneeName = node.assignee_first_name
+      ? `${node.assignee_first_name} ${node.assignee_last_name || ''}`.trim()
+      : null;
+
+    return (
+      <div key={node.id} style={{ marginLeft: `${indentPx}px` }}>
+        <div className="flex items-center gap-2 py-2 px-3 rounded-lg bg-secondary/30 border border-border/40 hover:border-primary/30 transition-colors group mb-1">
+          {/* Expand/Collapse */}
+          <button
+            className={`w-5 h-5 flex items-center justify-center rounded hover:bg-muted/50 flex-shrink-0 ${!hasChildren ? 'invisible' : ''}`}
+            onClick={() => onToggle(node.id)}
+          >
+            {hasChildren ? (
+              isExpanded
+                ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+            ) : (
+              <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40" />
+            )}
+          </button>
+
+          {/* Level indicator */}
+          <div className={`w-1 h-4 rounded-full flex-shrink-0 ${colorClass.replace('text-', 'bg-')}`} />
+
+          {/* Task info */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              {node.task_code && (
+                <span className="text-[10px] text-muted-50 font-mono">{node.task_code}</span>
+              )}
+              <span className="text-sm font-medium truncate">{node.title}</span>
+              {hasChildren && (
+                <span className="text-[9px] bg-muted/50 text-muted-foreground px-1 py-0.5 rounded-full tabular-nums">
+                  {children.length}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-3 mt-1">
+              {getStatusBadge(node.status)}
+              <span className="text-[10px] text-muted-foreground">{Math.round(node.completion_percentage || 0)}%</span>
+              {assigneeName && (
+                <div className="flex items-center gap-1">
+                  <UserIcon className="w-3 h-3 text-muted-foreground" />
+                  <span className="text-[10px] text-muted-foreground">{assigneeName}</span>
+                </div>
+              )}
+              {node.due_date && (
+                <span className="text-[10px] text-muted-foreground">{formatDate(node.due_date)}</span>
+              )}
+            </div>
+            {/* Mini progress bar */}
+            <div className="mt-1 h-1 bg-muted rounded-full overflow-hidden w-32">
+              <div
+                className={`h-full rounded-full ${(node.completion_percentage || 0) >= 100 ? 'bg-green-500' : (node.completion_percentage || 0) > 50 ? 'bg-blue-500' : 'bg-orange-500'}`}
+                style={{ width: `${Math.min(100, Math.max(0, node.completion_percentage || 0))}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Inline actions */}
+          <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 shrink-0">
+            <button
+              className="p-1 hover:bg-muted rounded"
+              title="Add Subtask"
+              onClick={(e) => { e.stopPropagation(); onAddSubtask(node); }}
+            >
+              <Plus className="w-3 h-3 text-muted-foreground" />
+            </button>
+          </div>
+        </div>
+
+        {/* Render children if expanded */}
+        {isExpanded && children.length > 0 && (
+          <div className="border-l-2 border-border/30 ml-[18px] pl-1">
+            {children.map(child => renderNode(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Root-level descendants (those whose parent is the main task, not in the descendants list)
+  // The "root" of the subtree = tasks whose parent_task_id is the opened task ID
+  // Since we don't have the parent ID here, we find nodes that are depth=1 or whose parent is NOT in the descendants
+  const rootNodes = descendants.filter(d => {
+    // Root nodes: their parent is not in the descendants list (i.e., parent is the opened task itself)
+    return !allIds.has(d.parent_task_id || '');
+  });
+
+  if (rootNodes.length === 0) {
+    // Fallback: treat all as flat
+    return <>{descendants.map(d => renderNode(d, 0))}</>;
+  }
+
+  return (
+    <div className="space-y-0.5">
+      {rootNodes.map(node => renderNode(node, 0))}
+    </div>
+  );
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function TaskDetailDrawer({
@@ -297,12 +444,14 @@ export default function TaskDetailDrawer({
   const [comments, setComments] = useState<Comment[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
+  const [descTreeExpanded, setDescTreeExpanded] = useState<Set<string>>(new Set());
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [parentTaskName, setParentTaskName] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [showAddSubtask, setShowAddSubtask] = useState(false);
+  const [addSubtaskParent, setAddSubtaskParent] = useState<any>(null);
   const [users, setUsers] = useState<any[]>(usersProp || []);
   const panelRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
@@ -331,21 +480,16 @@ export default function TaskDetailDrawer({
           api.tasks.checklist(taskId, token).catch(() => []),
           api.tasks.comments(taskId, token).catch(() => []),
           api.tasks.activity(taskId, token).catch(() => []),
-          api.tasks.list({ parentTaskId: taskId }, token).catch(() => ({ data: [] })),
+          api.tasks.descendants(taskId, token).catch(() => []),
         ]);
 
       setTask(taskData as TaskDetail);
       setChecklist(Array.isArray(checklistData) ? checklistData : []);
       setComments(Array.isArray(commentsData) ? commentsData : []);
       setActivities(Array.isArray(activitiesData) ? activitiesData : []);
-      const subtasksResult = subtasksData as any;
-      setSubtasks(
-        Array.isArray(subtasksResult)
-          ? subtasksResult
-          : Array.isArray(subtasksResult?.data)
-          ? subtasksResult.data
-          : []
-      );
+      // Store ALL descendants as a flat list — tree is built in render
+      const descResult = subtasksData as any;
+      setSubtasks(Array.isArray(descResult) ? descResult : []);
 
       // Set parent task name if applicable
       const taskDetail = taskData as TaskDetail;
@@ -405,6 +549,14 @@ export default function TaskDetailDrawer({
       setError(null);
     }
   }, [isOpen, fetchTaskData]);
+
+  // Auto-expand all descendant nodes when data loads
+  useEffect(() => {
+    if (subtasks.length > 0) {
+      const allIds = new Set(subtasks.map((s: any) => s.id));
+      setDescTreeExpanded(allIds);
+    }
+  }, [subtasks.length]);
 
   // Animation visibility
   useEffect(() => {
@@ -851,14 +1003,14 @@ export default function TaskDetailDrawer({
                 )}
               </section>
 
-              {/* ─── SUBTASKS ──────────────────────────────────────────── */}
+              {/* ─── DESCENDANT TREE (recursive) ──────────────────────── */}
               <section>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
                     Subtasks ({subtasks.length})
                   </h3>
                   <button
-                    onClick={() => setShowAddSubtask(true)}
+                    onClick={() => { setAddSubtaskParent(null); setShowAddSubtask(true); }}
                     className="btn btn-ghost text-xs h-7 px-2 flex items-center gap-1"
                   >
                     <Plus className="w-3 h-3" />
@@ -878,55 +1030,22 @@ export default function TaskDetailDrawer({
                     </button>
                   </div>
                 ) : (
-                  <div className="space-y-2 pl-3 border-l-2 border-purple-500/30 ml-1">
-                    {subtasks.map((subtask) => (
-                      <div
-                        key={subtask.id}
-                        className="p-3 bg-secondary/50 rounded-lg space-y-2 border border-border/50 hover:border-purple-500/30 transition-colors group"
-                      >
-                        {/* Nested visual connector */}
-                        <div className="flex items-start gap-2">
-                          <div className="w-3 h-3 mt-0.5 shrink-0 flex items-center justify-center">
-                            <GitBranch className="w-3.5 h-3.5 text-purple-500/60" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-sm font-medium truncate">
-                                {subtask.taskCode && (
-                                  <span className="text-muted-foreground/50 text-xs mr-1">{subtask.taskCode}</span>
-                                )}
-                                {subtask.title}
-                              </span>
-                              <div className="flex items-center gap-2 shrink-0">
-                                {getStatusBadge(subtask.status)}
-                                <span className="text-xs text-muted-foreground">
-                                  {subtask.completionPercentage || 0}%
-                                </span>
-                              </div>
-                            </div>
-                            <ProgressBar percentage={subtask.completionPercentage || 0} />
-                            <div className="flex items-center justify-between mt-1">
-                              {subtask.assignee ? (
-                                <div className="flex items-center gap-1.5">
-                                  <Avatar user={subtask.assignee} />
-                                  <span className="text-xs text-muted-foreground">
-                                    {subtask.assignee.firstName} {subtask.assignee.lastName}
-                                  </span>
-                                </div>
-                              ) : (
-                                <span className="text-xs text-muted-foreground/50 italic">Unassigned</span>
-                              )}
-                              {subtask.dueDate && (
-                                <span className="text-xs text-muted-foreground">
-                                  Due: {formatDate(subtask.dueDate)}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <DescendantTree
+                    descendants={subtasks}
+                    users={users}
+                    expandedIds={descTreeExpanded}
+                    onToggle={(id) => {
+                      setDescTreeExpanded(prev => {
+                        const next = new Set(prev);
+                        if (next.has(id)) next.delete(id); else next.add(id);
+                        return next;
+                      });
+                    }}
+                    onAddSubtask={(parentNode) => {
+                      setAddSubtaskParent(parentNode);
+                      setShowAddSubtask(true);
+                    }}
+                  />
                 )}
               </section>
 
@@ -1036,7 +1155,7 @@ export default function TaskDetailDrawer({
           {task && (
             <>
               <button
-                onClick={() => setShowAddSubtask(true)}
+                onClick={() => { setAddSubtaskParent(null); setShowAddSubtask(true); }}
                 className="btn btn-ghost flex items-center gap-1.5"
               >
                 <Plus className="h-4 w-4" />
@@ -1071,26 +1190,39 @@ export default function TaskDetailDrawer({
       </div>
 
       {/* Add Subtask Modal */}
-      {showAddSubtask && task && (
-        <AddSubtaskModal
-          isOpen={showAddSubtask}
-          onClose={() => setShowAddSubtask(false)}
-          onSuccess={() => {
-            setShowAddSubtask(false);
-            fetchTaskData();
-            onTaskUpdated?.();
-          }}
-          parentTask={{
-            id: task.id,
-            title: task.title,
-            taskCode: task.taskCode || '',
-            projectId: task.projectId || '',
-            projectName: task.projectName,
-          }}
-          token={token}
-          users={users}
-        />
-      )}
+      {showAddSubtask && task && (() => {
+        // Determine which task is the parent for the new subtask
+        const parentForNewTask = addSubtaskParent
+          ? {
+              id: addSubtaskParent.id,
+              title: addSubtaskParent.title,
+              taskCode: addSubtaskParent.task_code || '',
+              projectId: task.projectId || '',
+              projectName: task.projectName,
+            }
+          : {
+              id: task.id,
+              title: task.title,
+              taskCode: task.taskCode || '',
+              projectId: task.projectId || '',
+              projectName: task.projectName,
+            };
+        return (
+          <AddSubtaskModal
+            isOpen={showAddSubtask}
+            onClose={() => { setShowAddSubtask(false); setAddSubtaskParent(null); }}
+            onSuccess={() => {
+              setShowAddSubtask(false);
+              setAddSubtaskParent(null);
+              fetchTaskData();
+              onTaskUpdated?.();
+            }}
+            parentTask={parentForNewTask}
+            token={token}
+            users={users}
+          />
+        );
+      })()}
     </>
   );
 }

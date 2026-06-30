@@ -780,6 +780,33 @@ export class TasksService {
     );
   }
 
+  // === Hierarchy: Get ALL descendants of a task (recursive CTE) ===
+  async getDescendants(taskId: string) {
+    const rows = await this.repo.query(
+      `WITH RECURSIVE descendants AS (
+        -- Direct children
+        SELECT t.*, 1 as depth,
+               u.first_name as assignee_first_name, u.last_name as assignee_last_name, u.avatar_url as assignee_avatar
+        FROM tasks t
+        LEFT JOIN users u ON t.assignee_id = u.id
+        WHERE t.parent_task_id = $1 AND t.deleted_at IS NULL
+        UNION ALL
+        -- Recursive: children of children
+        SELECT t.*, d.depth + 1,
+               u.first_name as assignee_first_name, u.last_name as assignee_last_name, u.avatar_url as assignee_avatar
+        FROM tasks t
+        INNER JOIN descendants d ON t.parent_task_id = d.id
+        LEFT JOIN users u ON t.assignee_id = u.id
+        WHERE t.deleted_at IS NULL
+          AND d.depth < 10  -- safety limit: max 10 levels deep
+      )
+      SELECT * FROM descendants
+      ORDER BY depth ASC, position ASC, created_at ASC`,
+      [taskId],
+    );
+    return rows;
+  }
+
   // === Hierarchy: Get Full Task Tree ===
   async getTaskTree(projectId: string) {
     const allTasks = await this.repo.query(

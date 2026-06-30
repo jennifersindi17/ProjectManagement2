@@ -117,6 +117,8 @@ export const api = {
       apiFetch(`/tasks/${taskId}/duplicate`, { method: 'POST', body: data, token }),
     subtasks: (taskId: string, token: string): Promise<any[]> =>
       apiFetch(`/tasks/${taskId}/subtasks`, { token }),
+    descendants: (taskId: string, token: string): Promise<any[]> =>
+      apiFetch(`/tasks/${taskId}/descendants`, { token }),
     tree: (projectId: string, token: string): Promise<any[]> =>
       apiFetch(`/tasks/tree/${projectId}`, { token }),
     breadcrumb: (taskId: string, token: string): Promise<any[]> =>

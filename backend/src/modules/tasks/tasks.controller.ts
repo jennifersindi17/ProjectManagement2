@@ -25,9 +25,14 @@ export class TasksController {
     return this.service.getTaskTree(projectId);
   }
 
-  @Get(':id/subtasks') @ApiOperation({ summary: 'Get subtasks of a task' })
+  @Get(':id/subtasks') @ApiOperation({ summary: 'Get direct subtasks of a task' })
   getSubtasks(@Param('id') id: string) {
     return this.service.getSubtasks(id);
+  }
+
+  @Get(':id/descendants') @ApiOperation({ summary: 'Get ALL descendants of a task (recursive tree)' })
+  getDescendants(@Param('id') id: string) {
+    return this.service.getDescendants(id);
   }
 
   // === Existing CRUD ===
