@@ -176,4 +176,14 @@ export class TasksController {
   duplicate(@Param('id') id: string, @Body() body: any, @CurrentUser('id') userId: string) {
     return this.service.duplicate(id, body, userId);
   }
+
+  @Get(':id/breadcrumb') @ApiOperation({ summary: 'Get task breadcrumb path' })
+  getBreadcrumb(@Param('id') id: string) {
+    return this.service.getBreadcrumb(id);
+  }
+
+  @Patch(':id/reparent') @ApiOperation({ summary: 'Move task to new parent (drag & drop)' })
+  reparentTask(@Param('id') id: string, @Body() body: { parentId: string | null; position?: number }) {
+    return this.service.reparentTask(id, body.parentId, body.position);
+  }
 }

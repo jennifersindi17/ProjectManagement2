@@ -42,6 +42,7 @@ export interface TaskDetailDrawerProps {
   taskId: string;
   token: string;
   users?: any[];
+  breadcrumb?: any[];
 }
 
 interface TaskDetail {
@@ -289,6 +290,7 @@ export default function TaskDetailDrawer({
   taskId,
   token,
   users: usersProp,
+  breadcrumb,
 }: TaskDetailDrawerProps) {
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
@@ -566,9 +568,23 @@ export default function TaskDetailDrawer({
         <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
             <Hash className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-            <span className="font-semibold text-lg truncate">
-              {task?.taskCode || taskId}
-            </span>
+            <div className="min-w-0">
+              {breadcrumb && breadcrumb.length > 1 && (
+                <div className="flex items-center gap-1 text-[11px] text-muted-foreground truncate">
+                  {breadcrumb.map((b: any, i: number) => (
+                    <span key={b.id} className="flex items-center gap-1">
+                      {i > 0 && <span className="text-muted-foreground/40">›</span>}
+                      <span className={i === breadcrumb.length - 1 ? 'text-foreground font-medium' : 'hover:underline cursor-pointer'}>
+                        {b.title}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <span className="font-semibold text-lg truncate block">
+                {task?.taskCode || taskId}
+              </span>
+            </div>
           </div>
           <button
             onClick={onClose}

@@ -117,8 +117,12 @@ export const api = {
       apiFetch(`/tasks/${taskId}/duplicate`, { method: 'POST', body: data, token }),
     subtasks: (taskId: string, token: string): Promise<any[]> =>
       apiFetch(`/tasks/${taskId}/subtasks`, { token }),
-    taskTree: (projectId: string, token: string): Promise<any[]> =>
+    tree: (projectId: string, token: string): Promise<any[]> =>
       apiFetch(`/tasks/tree/${projectId}`, { token }),
+    breadcrumb: (taskId: string, token: string): Promise<any[]> =>
+      apiFetch(`/tasks/${taskId}/breadcrumb`, { token }),
+    reparent: (taskId: string, parentId: string | null, token: string): Promise<any> =>
+      apiFetch(`/tasks/${taskId}/reparent`, { method: 'PATCH', token, body: { parentId } }),
     recalculate: (projectId: string, token: string): Promise<{ progress: number }> =>
       apiFetch(`/tasks/recalculate/${projectId}`, { method: 'POST', token }),
     bulkStatus: (taskIds: string[], status: string, token: string) =>

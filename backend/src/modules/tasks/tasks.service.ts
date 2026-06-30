@@ -113,8 +113,8 @@ export class TasksService {
       if (parentCheck[0].project_id !== dto.projectId) {
         throw new BadRequestException('Parent Task belongs to a different project');
       }
-      if (parentCheck[0].level >= 3) {
-        throw new BadRequestException('Maximum hierarchy level exceeded (max 3)');
+      if (parentCheck[0].level >= 5) {
+        throw new BadRequestException('Maximum hierarchy level exceeded (max 5)');
       }
       taskLevel = parentCheck[0].level + 1;
     }
@@ -809,6 +809,69 @@ export class TasksService {
     });
 
     return roots;
+  }
+
+  // === Hierarchy: Get Breadcrumb Path ===
+  async getBreadcrumb(taskId: string): Promise<any[]> {
+    const breadcrumb: any[] = [];
+    let currentId: string | null = taskId;
+    const visited = new Set<string>();
+    while (currentId && !visited.has(currentId)) {
+      visited.add(currentId);
+      const rows = await this.repo.query(
+        `SELECT id, title, task_code, parent_task_id, level FROM tasks WHERE id = $1 AND deleted_at IS NULL`,
+        [currentId],
+      );
+      if (rows.length === 0) break;
+      breadcrumb.unshift(rows[0]);
+      currentId = rows[0].parent_task_id;
+    }
+    return breadcrumb;
+  }
+
+  // === Hierarchy: Drag & Drop Reparent ===
+  async reparentTask(taskId: string, newParentId: string | null, newPosition?: number) {
+    if (newParentId) {
+      const parentRows = await this.repo.query(
+        `SELECT level FROM tasks WHERE id = $1 AND deleted_at IS NULL`,
+        [newParentId],
+      );
+      if (parentRows.length === 0) throw new NotFoundException('Parent task not found');
+      if (parentRows[0].level >= 5) {
+        throw new BadRequestException('Maximum hierarchy level exceeded (max 5)');
+      }
+    }
+    const newLevel = newParentId
+      ? (await this.repo.query(`SELECT level FROM tasks WHERE id = $1`, [newParentId]))[0].level + 1
+      : 1;
+
+    await this.repo.query(
+      `UPDATE tasks SET parent_task_id = $1, level = $2, updated_at = NOW() WHERE id = $3::uuid`,
+      [newParentId, newLevel, taskId],
+    );
+    await this.fixDescendantLevels(taskId, newLevel);
+
+    const rows = await this.repo.query(`SELECT project_id FROM tasks WHERE id = $1`, [taskId]);
+    if (rows.length > 0) {
+      await this.recalculateProgress(taskId);
+      await this.calculateProjectProgress(rows[0].project_id);
+    }
+    return { message: 'Task reparented', taskId, newParentId, newLevel };
+  }
+
+  private async fixDescendantLevels(parentId: string, parentLevel: number) {
+    const children = await this.repo.query(
+      `SELECT id FROM tasks WHERE parent_task_id = $1 AND deleted_at IS NULL`,
+      [parentId],
+    );
+    for (const child of children) {
+      const newLevel = parentLevel + 1;
+      await this.repo.query(
+        `UPDATE tasks SET level = $1 WHERE id = $2::uuid`,
+        [newLevel, child.id],
+      );
+      await this.fixDescendantLevels(child.id, newLevel);
+    }
   }
 
   // === Gantt Chart Data ===

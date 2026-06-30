@@ -11,6 +11,7 @@ import TaskModal from '@/components/tasks/TaskModal';
 import TaskDetailDrawer from '@/components/tasks/TaskDetailDrawer';
 import DuplicateTaskModal from '@/components/tasks/DuplicateTaskModal';
 import AddSubtaskModal from '@/components/tasks/AddSubtaskModal';
+import TaskTree from '@/components/tasks/TaskTree';
 import EditProjectModal from '@/components/projects/EditProjectModal';
 
 const TABS = [
@@ -470,6 +471,13 @@ function TasksTab({ tasks, projectId, token, onTaskCreated, users, project }: an
   };
 
   const [addSubtaskParent, setAddSubtaskParent] = useState<any>(null);
+  const [taskBreadcrumb, setTaskBreadcrumb] = useState<any[]>([]);
+
+  // Fetch breadcrumb when viewTaskId changes
+  useEffect(() => {
+    if (!viewTaskId || !token) { setTaskBreadcrumb([]); return; }
+    api.tasks.breadcrumb(viewTaskId, token).then(setTaskBreadcrumb).catch(() => setTaskBreadcrumb([]));
+  }, [viewTaskId, token]);
 
   const openAddSubtask = (task: any) => {
     setAddSubtaskParent(task);
@@ -557,7 +565,19 @@ function TasksTab({ tasks, projectId, token, onTaskCreated, users, project }: an
         </button>
       </div>
 
-      <div className="space-y-2">
+      <TaskTree
+        tasks={tasks}
+        projectId={projectId}
+        token={token}
+        users={users}
+        onTaskUpdated={refresh}
+        onEditTask={(task: any) => setTaskModal({ mode: 'edit', task })}
+        onViewTask={(task: any) => setViewTaskId(task.id)}
+        onDuplicateTask={(task: any) => setDuplicateTask(task)}
+        onAddSubtask={(task: any) => setAddSubtaskParent(task)}
+      />
+      {/* Keep invisible old rendering as fallback */}
+      <div className="hidden">
         {sortedTasks.map((task: any) => {
             const depth = (task.level || 1) - 1;
             const hasChildren = (parentChildCounts[task.id] || 0) > 0;
@@ -757,6 +777,7 @@ function TasksTab({ tasks, projectId, token, onTaskCreated, users, project }: an
           onOpenTaskCenter={handleOpenTaskCenter}
           taskId={viewTaskId}
           token={token}
+          breadcrumb={taskBreadcrumb}
         />
       )}
 
